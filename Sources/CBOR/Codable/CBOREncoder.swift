@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 /// Encodes Swift `Encodable` values to CBOR bytes, mirroring `JSONEncoder`.
 ///
 /// ```swift

@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 /// A decoded CBOR (Concise Binary Object Representation, [RFC 8949]) data item.
 ///
 /// `CBOR` is the in-memory value model produced when decoding bytes and consumed

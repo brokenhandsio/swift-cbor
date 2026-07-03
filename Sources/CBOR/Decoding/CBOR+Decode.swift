@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 extension CBOR {
     /// Decode exactly one CBOR data item from `bytes`, requiring that the entire
     /// input is consumed.

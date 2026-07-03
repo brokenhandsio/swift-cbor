@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 /// A type that can convert itself directly to a ``CBOR`` value.
 ///
 /// This is a lightweight, native alternative to Swift's `Encodable` for types that

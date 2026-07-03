@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 // Ergonomic read access to a decoded `CBOR` value: subscripts for maps/arrays and
 // typed accessors that return `nil` on a case mismatch.
 

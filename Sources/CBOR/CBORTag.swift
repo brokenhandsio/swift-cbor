@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 /// A CBOR tag (major type 6) that annotates the enclosed data item with
 /// additional semantics, as registered in the IANA CBOR Tags registry.
 public struct CBORTag: RawRepresentable, Sendable, Hashable {

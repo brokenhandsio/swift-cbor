@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 // Literal conformances let CBOR values be written naturally in source and tests,
 // e.g. `let item: CBOR = ["a": 1, "b": [2, 3]]`.
 

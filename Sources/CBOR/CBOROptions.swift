@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 /// Options controlling CBOR decoding and encoding.
 public struct CBOROptions: Sendable {
     /// The maximum nesting depth to decode, inclusive.

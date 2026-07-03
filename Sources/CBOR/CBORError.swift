@@ -1,11 +1,3 @@
-//===----------------------------------------------------------------------===//
-//
-// This source file is part of the swift-cbor open source project
-//
-// Licensed under the MIT license.
-//
-//===----------------------------------------------------------------------===//
-
 /// An error thrown while decoding or encoding CBOR.
 ///
 /// `@nonexhaustive`: additional cases may be added, so `switch` statements over
