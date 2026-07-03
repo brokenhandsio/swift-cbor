@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  macos-test:
+    name: Test (macOS)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  ios-test:
+    name: Test (iOS Simulator)
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme CBOR \
+            -destination 'platform=iOS Simulator,name=iPhone 16,OS=latest'
+
+  linux-test:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build
+        run: swift build
+      - name: Test
+        run: swift test
+
+  linux-benchmark:
+    name: Benchmarks (Linux)
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    steps:
+      - uses: actions/checkout@v7
+      - name: Run benchmarks
+        run: swift package --disable-sandbox benchmark
