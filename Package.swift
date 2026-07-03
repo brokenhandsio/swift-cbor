@@ -3,25 +3,38 @@
 
 import PackageDescription
 
+let extraSettings: [SwiftSetting] = [
+    .strictMemorySafety(),
+    .enableExperimentalFeature("SuppressedAssociatedTypesWithDefaults"),
+    .enableExperimentalFeature("LifetimeDependence"),
+    .enableExperimentalFeature("Lifetimes"),
+    .enableUpcomingFeature("LifetimeDependence"),
+    .enableUpcomingFeature("NonisolatedNonsendingByDefault"),
+    .enableUpcomingFeature("InferIsolatedConformances"),
+    .enableUpcomingFeature("ExistentialAny"),
+    .enableUpcomingFeature("MemberImportVisibility"),
+    .enableUpcomingFeature("InternalImportsByDefault"),
+]
+
 let package = Package(
     name: "swift-cbor",
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
-            name: "swift-cbor",
-            targets: ["swift-cbor"]
+            name: "CBOR",
+            targets: ["CBOR"]
         ),
     ],
     targets: [
         // Targets are the basic building blocks of a package, defining a module or a test suite.
         // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "swift-cbor"
+            name: "CBOR",
+            swiftSettings: extraSettings
         ),
         .testTarget(
-            name: "swift-cborTests",
-            dependencies: ["swift-cbor"]
+            name: "CBORTests",
+            dependencies: ["CBOR"],
+            swiftSettings: extraSettings
         ),
     ],
-    swiftLanguageModes: [.v6]
 )
