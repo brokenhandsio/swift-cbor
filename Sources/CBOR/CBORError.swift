@@ -31,11 +31,4 @@ public enum CBORError: Error, Hashable, Sendable {
     /// A map contained a duplicate key. Only reported when
     /// ``CBOROptions/rejectDuplicateMapKeys`` is enabled.
     case duplicateMapKey
-
-    /// A map key was not permitted by the active options.
-    case invalidMapKey
-
-    /// A CBOR value could not be represented as the requested Swift type. The
-    /// associated value names the expected type for diagnostics.
-    case typeMismatch(expected: String)
 }

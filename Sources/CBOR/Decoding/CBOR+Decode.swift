@@ -12,8 +12,12 @@ extension CBOR {
         _ bytes: Span<UInt8>,
         options: CBOROptions = .default
     ) throws -> CBOR {
-        // Implemented in a later step.
-        throw CBORUnimplementedError(symbol: "CBOR.decode(_:options:)")
+        var offset = 0
+        let value = try CBORParser.parseItem(bytes, &offset, depth: 0, options: options)
+        guard offset == bytes.count else {
+            throw CBORError.trailingData(remaining: bytes.count - offset)
+        }
+        return value
     }
 
     /// Decode the first CBOR data item from `bytes`, allowing and reporting trailing
@@ -29,8 +33,9 @@ extension CBOR {
         _ bytes: Span<UInt8>,
         options: CBOROptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
-        // Implemented in a later step.
-        throw CBORUnimplementedError(symbol: "CBOR.decodeFirst(_:options:)")
+        var offset = 0
+        let value = try CBORParser.parseItem(bytes, &offset, depth: 0, options: options)
+        return (value, offset)
     }
 }
 
