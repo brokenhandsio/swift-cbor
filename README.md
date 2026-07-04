@@ -1,6 +1,8 @@
 # swift-cbor
 
 [![CI](https://github.com/brokenhandsio/swift-cbor/actions/workflows/ci.yml/badge.svg)](https://github.com/brokenhandsio/swift-cbor/actions/workflows/ci.yml)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fbrokenhandsio%2Fswift-cbor%2Fbadge%3Ftype%3Dswift-versions)](https://swiftpackageindex.com/brokenhandsio/swift-cbor)
+[![](https://img.shields.io/endpoint?url=https%3A%2F%2Fswiftpackageindex.com%2Fapi%2Fpackages%2Fbrokenhandsio%2Fswift-cbor%2Fbadge%3Ftype%3Dplatforms)](https://swiftpackageindex.com/brokenhandsio/swift-cbor)
 
 A modern, memory-safe [CBOR](https://www.rfc-editor.org/rfc/rfc8949.html) (Concise
 Binary Object Representation, RFC 8949) library for Swift.
