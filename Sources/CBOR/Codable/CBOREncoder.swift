@@ -14,6 +14,6 @@ public struct CBOREncoder: Sendable {
     /// Encode a value to CBOR bytes.
     public func encode<T: Encodable>(_ value: T) throws -> [UInt8] {
         // Implemented in a later step.
-        fatalError("CBOREncoder.encode(_:) is not implemented yet")
+        throw CBORUnimplementedError(symbol: "CBOREncoder.encode(_:)")
     }
 }

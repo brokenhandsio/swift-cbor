@@ -14,7 +14,7 @@ public struct CBORDecoder: Sendable {
     /// Decode a value of the given type from CBOR bytes.
     public func decode<T: Decodable>(_ type: T.Type = T.self, from bytes: [UInt8]) throws -> T {
         // Implemented in a later step.
-        fatalError("CBORDecoder.decode(_:from:) is not implemented yet")
+        throw CBORUnimplementedError(symbol: "CBORDecoder.decode(_:from:)")
     }
 
     /// Decode a value of the given type from a slice of CBOR bytes.

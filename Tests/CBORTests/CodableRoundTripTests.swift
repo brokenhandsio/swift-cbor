@@ -79,6 +79,32 @@ struct CodableRoundTripTests {
         #expect(hexString(bytes) == "a2617801617902")
     }
 
+    // Independent-direction checks: encode against fixed bytes and decode from
+    // fixed bytes separately, so a bug shared by both directions can't hide behind
+    // a round trip.
+
+    @Test("encoder produces exact bytes")
+    func encoderExactBytes() throws {
+        #expect(hexString(try CBOREncoder().encode(Point(x: 1, y: 2))) == "a2617801617902")
+        #expect(hexString(try CBOREncoder().encode([1, 2, 3])) == "83010203")
+        #expect(hexString(try CBOREncoder().encode("IETF")) == "6449455446")
+        #expect(hexString(try CBOREncoder().encode(true)) == "f5")
+        #expect(hexString(try CBOREncoder().encode(42)) == "182a")
+        #expect(hexString(try CBOREncoder().encode(-1)) == "20")
+        #expect(hexString(try CBOREncoder().encode(Suit.spades)) == "66737061646573")
+    }
+
+    @Test("decoder reads exact bytes")
+    func decoderExactBytes() throws {
+        #expect(try CBORDecoder().decode(Point.self, from: bytes(fromHex: "a2617801617902")) == Point(x: 1, y: 2))
+        #expect(try CBORDecoder().decode([Int].self, from: bytes(fromHex: "83010203")) == [1, 2, 3])
+        #expect(try CBORDecoder().decode(String.self, from: bytes(fromHex: "6449455446")) == "IETF")
+        #expect(try CBORDecoder().decode(Bool.self, from: bytes(fromHex: "f5")) == true)
+        #expect(try CBORDecoder().decode(Int.self, from: bytes(fromHex: "182a")) == 42)
+        #expect(try CBORDecoder().decode(Int.self, from: bytes(fromHex: "20")) == -1)
+        #expect(try CBORDecoder().decode(Suit.self, from: bytes(fromHex: "66737061646573")) == .spades)
+    }
+
     @Test("Data encodes to a CBOR byte string")
     func dataAsByteString() throws {
         struct Blob: Codable, Equatable { var payload: Data }

@@ -13,7 +13,7 @@ extension CBOR {
         options: CBOROptions = .default
     ) throws -> CBOR {
         // Implemented in a later step.
-        fatalError("CBOR.decode(_:options:) is not implemented yet")
+        throw CBORUnimplementedError(symbol: "CBOR.decode(_:options:)")
     }
 
     /// Decode the first CBOR data item from `bytes`, allowing and reporting trailing
@@ -30,7 +30,7 @@ extension CBOR {
         options: CBOROptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
         // Implemented in a later step.
-        fatalError("CBOR.decodeFirst(_:options:) is not implemented yet")
+        throw CBORUnimplementedError(symbol: "CBOR.decodeFirst(_:options:)")
     }
 }
 

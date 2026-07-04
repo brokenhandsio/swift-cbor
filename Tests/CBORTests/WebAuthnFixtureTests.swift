@@ -36,9 +36,9 @@ struct WebAuthnFixtureTests {
     func coseKeyCanonicalOrder() {
         // Keys sort bytewise: 0x01, 0x03, 0x20 (-1), 0x21 (-2), 0x22 (-3).
         let encoded = Self.coseKey.encode()
-        #expect(encoded.first == 0xa5)
-        // First three key/value openers after the map header.
-        #expect(Array(encoded[1...5]) == [0x01, 0x02, 0x03, 0x26, 0x20])
+        // Map header 0xa5, then the first two key/value pairs and the third key,
+        // in canonical order. `prefix` keeps this slice-safe on empty input.
+        #expect(Array(encoded.prefix(6)) == [0xa5, 0x01, 0x02, 0x03, 0x26, 0x20])
     }
 
     @Test("attestation object with fmt=none")
