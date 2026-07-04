@@ -86,6 +86,19 @@ struct FuzzSafetyTests {
         }
     }
 
+    @Test("encoding a deeply nested value is correct and does not overflow the stack")
+    func deepEncodingIsBounded() throws {
+        // Build a nested array and round-trip it. The encoder walks nesting with an
+        // explicit work stack (O(1) native stack), so encoding cannot overflow. The
+        // depth is kept modest here because the recursive value model still
+        // deallocates deep values recursively (bounded in practice by maximumDepth).
+        var value: CBOR = .unsignedInt(0)
+        for _ in 0..<500 { value = .array([value]) }
+        let encoded = value.encode()
+        let decoded = try CBOR.decode(encoded, options: CBOROptions(maximumDepth: 1024))
+        #expect(decoded == value)
+    }
+
     @Test("truncated headers throw unexpectedEnd", arguments: [
         "18", "19", "1a", "1b",       // unsigned int, 1/2/4/8-byte argument missing
         "38", "39", "3a", "3b",       // negative int

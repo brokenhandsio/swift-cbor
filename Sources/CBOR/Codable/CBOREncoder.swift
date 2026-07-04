@@ -49,7 +49,9 @@ private enum EncodingNode {
 
     func write(to out: inout [UInt8], options: CBOROptions) {
         switch self {
-        case .scalar(let value): value.appendEncoding(to: &out, options: options)
+        // A `.scalar` node is always a leaf CBOR value, so it can be written directly
+        // without spinning up the iterative encoder's work stack.
+        case .scalar(let value): value.appendScalarBytes(to: &out)
         case .container(let node): node.write(to: &out, options: options)
         }
     }
@@ -87,10 +89,12 @@ private func writeMap(
     to out: inout [UInt8],
     options: CBOROptions
 ) {
+    // Keyed-container keys are always text-string scalars, so they can be written
+    // with `appendScalarBytes` (no work stack).
     appendTypedArgument(major: 5, UInt64(entries.count), to: &out)
     guard options.deterministic else {
         for entry in entries {
-            entry.key.appendEncoding(to: &out, options: options)
+            entry.key.appendScalarBytes(to: &out)
             entry.node.write(to: &out, options: options)
         }
         return
@@ -100,7 +104,7 @@ private func writeMap(
     ranges.reserveCapacity(entries.count)
     for (index, entry) in entries.enumerated() {
         let start = keyBytes.count
-        entry.key.appendEncoding(to: &keyBytes, options: options)
+        entry.key.appendScalarBytes(to: &keyBytes)
         ranges.append((start, keyBytes.count, index))
     }
     ranges.sort { keyRangeIsOrderedBefore(keyBytes, $0.start, $0.end, $1.start, $1.end) }
