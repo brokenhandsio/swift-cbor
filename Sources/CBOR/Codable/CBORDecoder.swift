@@ -22,8 +22,16 @@ public struct CBORDecoder: Sendable {
     /// Decode a value of the given type from CBOR bytes.
     public func decode<T: Decodable>(_ type: T.Type = T.self, from bytes: [UInt8]) throws -> T {
         let cbor = try CBOR.decode(bytes, options: options)
+        #if FoundationSupport
+        if type == Data.self {
+            guard case .byteString(let byteValue) = cbor else {
+                throw typeMismatch(Data.self, cbor, [])
+            }
+            return Data(byteValue) as! T
+        }
+        #endif
         let decoder = _CBORDecoder(cbor: cbor, options: options)
-        return try decoder.unbox(cbor, as: type)
+        return try T(from: decoder)
     }
 
     /// Decode a value of the given type from a slice of CBOR bytes.
@@ -64,8 +72,9 @@ private final class _CBORDecoder: Decoder {
         SingleValueContainer(cbor: cbor, options: options, codingPath: codingPath)
     }
 
-    /// Decode any `Decodable` type from a CBOR value, special-casing `Data`
-    /// when Foundation support is enabled.
+    /// Decode any `Decodable` type from this decoder's value, special-casing `Data`
+    /// when Foundation support is enabled. Callers construct a decoder whose `cbor`
+    /// is the value to unbox, so this decodes directly from `self`.
     func unbox<T: Decodable>(_ cbor: CBOR, as type: T.Type) throws -> T {
         #if FoundationSupport
         if type == Data.self {
@@ -75,8 +84,7 @@ private final class _CBORDecoder: Decoder {
             return Data(bytes) as! T
         }
         #endif
-        let decoder = _CBORDecoder(cbor: cbor, options: options, codingPath: codingPath)
-        return try T(from: decoder)
+        return try T(from: self)
     }
 }
 
@@ -185,8 +193,6 @@ private struct KeyedContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
         return value
     }
 
-    private func path(_ key: Key) -> [any CodingKey] { codingPath + [key] }
-
     func contains(_ key: Key) -> Bool {
         map[.textString(key.stringValue)] != nil
     }
@@ -195,36 +201,36 @@ private struct KeyedContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
         try find(key).isNull
     }
 
-    func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool { try unboxBool(find(key), path(key)) }
-    func decode(_ type: String.Type, forKey key: Key) throws -> String { try unboxString(find(key), path(key)) }
-    func decode(_ type: Double.Type, forKey key: Key) throws -> Double { try unboxDouble(find(key), path(key)) }
-    func decode(_ type: Float.Type, forKey key: Key) throws -> Float { try unboxFloat(find(key), path(key)) }
-    func decode(_ type: Int.Type, forKey key: Key) throws -> Int { try unboxSigned(find(key), type, path(key)) }
-    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 { try unboxSigned(find(key), type, path(key)) }
-    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 { try unboxSigned(find(key), type, path(key)) }
-    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 { try unboxSigned(find(key), type, path(key)) }
-    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 { try unboxSigned(find(key), type, path(key)) }
-    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt { try unboxUnsigned(find(key), type, path(key)) }
-    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 { try unboxUnsigned(find(key), type, path(key)) }
-    func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 { try unboxUnsigned(find(key), type, path(key)) }
-    func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 { try unboxUnsigned(find(key), type, path(key)) }
-    func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 { try unboxUnsigned(find(key), type, path(key)) }
+    func decode(_ type: Bool.Type, forKey key: Key) throws -> Bool { try unboxBool(find(key), codingPath) }
+    func decode(_ type: String.Type, forKey key: Key) throws -> String { try unboxString(find(key), codingPath) }
+    func decode(_ type: Double.Type, forKey key: Key) throws -> Double { try unboxDouble(find(key), codingPath) }
+    func decode(_ type: Float.Type, forKey key: Key) throws -> Float { try unboxFloat(find(key), codingPath) }
+    func decode(_ type: Int.Type, forKey key: Key) throws -> Int { try unboxSigned(find(key), type, codingPath) }
+    func decode(_ type: Int8.Type, forKey key: Key) throws -> Int8 { try unboxSigned(find(key), type, codingPath) }
+    func decode(_ type: Int16.Type, forKey key: Key) throws -> Int16 { try unboxSigned(find(key), type, codingPath) }
+    func decode(_ type: Int32.Type, forKey key: Key) throws -> Int32 { try unboxSigned(find(key), type, codingPath) }
+    func decode(_ type: Int64.Type, forKey key: Key) throws -> Int64 { try unboxSigned(find(key), type, codingPath) }
+    func decode(_ type: UInt.Type, forKey key: Key) throws -> UInt { try unboxUnsigned(find(key), type, codingPath) }
+    func decode(_ type: UInt8.Type, forKey key: Key) throws -> UInt8 { try unboxUnsigned(find(key), type, codingPath) }
+    func decode(_ type: UInt16.Type, forKey key: Key) throws -> UInt16 { try unboxUnsigned(find(key), type, codingPath) }
+    func decode(_ type: UInt32.Type, forKey key: Key) throws -> UInt32 { try unboxUnsigned(find(key), type, codingPath) }
+    func decode(_ type: UInt64.Type, forKey key: Key) throws -> UInt64 { try unboxUnsigned(find(key), type, codingPath) }
 
     func decode<T: Decodable>(_ type: T.Type, forKey key: Key) throws -> T {
         let value = try find(key)
-        let decoder = _CBORDecoder(cbor: value, options: options, codingPath: path(key))
+        let decoder = _CBORDecoder(cbor: value, options: options, codingPath: codingPath)
         return try decoder.unbox(value, as: type)
     }
 
     func nestedContainer<NestedKey: CodingKey>(
         keyedBy type: NestedKey.Type, forKey key: Key
     ) throws -> KeyedDecodingContainer<NestedKey> {
-        let decoder = _CBORDecoder(cbor: try find(key), options: options, codingPath: path(key))
+        let decoder = _CBORDecoder(cbor: try find(key), options: options, codingPath: codingPath)
         return try decoder.container(keyedBy: type)
     }
 
     func nestedUnkeyedContainer(forKey key: Key) throws -> any UnkeyedDecodingContainer {
-        let decoder = _CBORDecoder(cbor: try find(key), options: options, codingPath: path(key))
+        let decoder = _CBORDecoder(cbor: try find(key), options: options, codingPath: codingPath)
         return try decoder.unkeyedContainer()
     }
 
@@ -233,7 +239,7 @@ private struct KeyedContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
     }
 
     func superDecoder(forKey key: Key) throws -> any Decoder {
-        _CBORDecoder(cbor: try find(key), options: options, codingPath: path(key))
+        _CBORDecoder(cbor: try find(key), options: options, codingPath: codingPath)
     }
 }
 
