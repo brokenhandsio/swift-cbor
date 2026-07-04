@@ -43,10 +43,7 @@ let package = Package(
         ),
         .default(enabledTraits: ["FoundationSupport"]),
     ],
-    dependencies: [
-        // Benchmarking harness. >= 1.35.0 no longer requires jemalloc / system deps.
-        .package(url: "https://github.com/ordo-one/benchmark", from: "1.35.0"),
-    ],
+    dependencies: [],
     targets: [
         // The library itself. Strict memory safety and the modern language features
         // are applied here (and to its tests) only.
@@ -59,9 +56,24 @@ let package = Package(
             dependencies: ["CBOR"],
             swiftSettings: extraSettings
         ),
-        // Benchmarks live under Benchmarks/ so the package-benchmark plugin discovers
-        // them. Deliberately NOT built with `extraSettings`: the benchmark harness is
-        // not strict-memory-safe, and benchmarks are not shipped to library consumers.
+    ]
+)
+
+// MARK: - Development-only dependencies
+//
+// These pull in dependency trees that library consumers should never have to
+// resolve, so they are wired up only when their environment flag is set. A normal
+// `import CBOR` therefore resolves with zero external dependencies.
+
+// Benchmarks (ordo-one/benchmark + its transitive tree). CI sets CBOR_BENCHMARK=1.
+if Context.environment["CBOR_BENCHMARK"] != nil {
+    package.dependencies.append(
+        .package(url: "https://github.com/ordo-one/benchmark", from: "1.35.0")
+    )
+    package.targets.append(
+        // Benchmarks live under Benchmarks/ so the benchmark plugin discovers them.
+        // Deliberately NOT built with `extraSettings`: the harness is not
+        // strict-memory-safe, and benchmarks are never shipped to consumers.
         .executableTarget(
             name: "CBORBenchmarks",
             dependencies: [
@@ -72,6 +84,13 @@ let package = Package(
             plugins: [
                 .plugin(name: "BenchmarkPlugin", package: "benchmark"),
             ]
-        ),
-    ]
-)
+        )
+    )
+}
+
+// DocC documentation plugin. CI sets CBOR_DOCC=1 when building the docs archive.
+if Context.environment["CBOR_DOCC"] != nil {
+    package.dependencies.append(
+        .package(url: "https://github.com/swiftlang/swift-docc-plugin", from: "1.4.0")
+    )
+}
