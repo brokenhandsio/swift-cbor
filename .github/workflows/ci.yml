@@ -60,7 +60,25 @@ jobs:
     name: Benchmarks (Linux)
     runs-on: ubuntu-latest
     container: swift:6.3
+    env:
+      CBOR_BENCHMARK: "1" # wire up the (otherwise-gated) benchmark target
     steps:
       - uses: actions/checkout@v7
       - name: Run benchmarks
         run: swift package --disable-sandbox benchmark
+
+  docs:
+    name: DocC archive
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    env:
+      CBOR_DOCC: "1" # wire up the (otherwise-gated) swift-docc-plugin
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build documentation archive
+        run: swift package generate-documentation --target CBOR
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: CBOR.doccarchive
+          path: .build/plugins/Swift-DocC/outputs/CBOR.doccarchive

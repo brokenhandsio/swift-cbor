@@ -179,13 +179,25 @@ encode/decode, and the Codable bridge for all non-`Data` types are available wit
 no Foundation linked. (`Data` properties then encode via standard `Codable` as an
 array of integers rather than a byte string.)
 
+## Documentation
+
+API documentation is built with [DocC](https://www.swift.org/documentation/docc/).
+The DocC plugin is gated behind an environment flag so consumers of the library never
+resolve it:
+
+```sh
+CBOR_DOCC=1 swift package generate-documentation --target CBOR
+```
+
 ## Benchmarks
 
 Benchmarks use [ordo-one/benchmark](https://github.com/ordo-one/benchmark) and live
-under `Benchmarks/`:
+under `Benchmarks/`. They are likewise gated behind an environment flag so the
+harness's dependency tree never reaches library consumers — a plain `import CBOR`
+resolves with **zero** external dependencies:
 
 ```sh
-swift package benchmark
+CBOR_BENCHMARK=1 swift package benchmark
 ```
 
 They cover COSE-key decode/encode, large array/map throughput, full round-trips, and
