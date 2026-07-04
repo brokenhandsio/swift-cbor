@@ -56,6 +56,13 @@ let package = Package(
             dependencies: ["CBOR"],
             swiftSettings: extraSettings
         ),
+        // Generative fuzzing: builds random valid/mutated/garbage inputs at test
+        // time (seeded, reproducible) rather than vendoring a fixed corpus.
+        .testTarget(
+            name: "FuzzTests",
+            dependencies: ["CBOR"],
+            swiftSettings: extraSettings
+        ),
     ]
 )
 
