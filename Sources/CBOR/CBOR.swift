@@ -4,9 +4,6 @@
 /// when encoding. Each case corresponds to a CBOR major type or a well-known
 /// major-type-7 simple value.
 ///
-/// The enum is `@nonexhaustive`: future versions may add cases, so downstream
-/// `switch` statements should include an `@unknown default:` arm.
-///
 /// [RFC 8949]: https://www.rfc-editor.org/rfc/rfc8949.html
 @nonexhaustive
 public enum CBOR: Sendable, Hashable {

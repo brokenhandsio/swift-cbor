@@ -1,7 +1,4 @@
 /// An error thrown while decoding or encoding CBOR.
-///
-/// `@nonexhaustive`: additional cases may be added, so `switch` statements over
-/// `CBORError` should include an `@unknown default:` arm.
 @nonexhaustive
 public enum CBORError: Error, Hashable, Sendable {
     /// The input ended before a complete data item could be read.
