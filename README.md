@@ -13,6 +13,8 @@ Binary Object Representation, RFC 8949) library for Swift.
   ±2⁶⁴ integer range.
 - **Deterministic encoding.** Shortest-form integers and canonically ordered map
   keys (RFC 8949 §4.2) by default.
+- **Fast and lean.** Benchmarked against other Swift CBOR libraries, with fewer
+  allocations and lower instruction counts across decode and encode.
 - **Two ways to use it.** Work with the `CBOR` value model directly, or bridge any
   `Codable` type through `CBOREncoder` / `CBORDecoder`.
 - **Optional Foundation.** Foundation is only used to bridge `Data`; it lives behind
@@ -201,7 +203,19 @@ CBOR_BENCHMARK=1 swift package benchmark
 ```
 
 They cover COSE-key decode/encode, large array/map throughput, full round-trips, and
-the Codable bridge, reporting wall-clock time, throughput, and allocation counts.
+the Codable bridge. CI gates regressions on **instruction count** and **allocation
+count** — deterministic metrics — alongside peak resident memory. swift-cbor has been
+benchmarked against other Swift CBOR libraries and shows improvements across both
+allocation count and instruction count.
+
+## Limits
+
+Like any Swift CBOR library built on a recursive value type, a decoded `CBOR` value is
+**deallocated recursively** — freeing a value nested many thousands of levels deep can
+exhaust the stack. Decoding and encoding themselves are fully iterative and never
+recurse on input nesting, and `CBOROptions.maximumDepth` (default 512) bounds how deep
+a decoded value can be, so values decoded from untrusted input free safely on ordinary
+stacks. Lower `maximumDepth` if you decode on threads with unusually small stacks.
 
 ## License
 
