@@ -13,7 +13,7 @@ extension CBOR {
         options: CBOROptions = .default
     ) throws -> CBOR {
         var offset = 0
-        let value = try CBORParser.parseItem(bytes, &offset, depth: 0, options: options)
+        let value = try CBORParser.parseItem(bytes, &offset, options: options)
         guard offset == bytes.count else {
             throw CBORError.trailingData(remaining: bytes.count - offset)
         }
@@ -34,7 +34,7 @@ extension CBOR {
         options: CBOROptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
         var offset = 0
-        let value = try CBORParser.parseItem(bytes, &offset, depth: 0, options: options)
+        let value = try CBORParser.parseItem(bytes, &offset, options: options)
         return (value, offset)
     }
 }

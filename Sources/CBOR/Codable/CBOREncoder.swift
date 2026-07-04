@@ -21,36 +21,97 @@ public struct CBOREncoder: Sendable {
 
     /// Encode a value to CBOR bytes.
     public func encode<T: Encodable>(_ value: T) throws -> [UInt8] {
+        var out: [UInt8] = []
+        out.reserveCapacity(64)
+        #if FoundationSupport
+        if let data = value as? Data {
+            appendTypedArgument(major: 2, UInt64(data.count), to: &out)
+            out.append(contentsOf: data)
+            return out
+        }
+        #endif
         let encoder = _CBOREncoder(options: options)
-        let cbor = try encoder.box(value)
-        return cbor.encode(options: options)
+        try value.encode(to: encoder)
+        encoder.write(to: &out, options: options)
+        return out
     }
 }
 
 // MARK: - Intermediate node
+//
+// The containers build a shallow tree of nodes as the value is encoded, then write
+// their CBOR bytes directly into the output buffer in a single pass — there is no
+// intermediate `CBOR` value tree and no second traversal.
 
-/// A slot in an encoding container: either a finished value or a still-mutable
-/// child container whose contents are materialized lazily.
 private enum EncodingNode {
-    case value(CBOR)
+    case scalar(CBOR)
     case container(any EncodingContainerNode)
 
-    var cbor: CBOR {
+    func write(to out: inout [UInt8], options: CBOROptions) {
         switch self {
-        case .value(let value): return value
-        case .container(let node): return node.cbor
+        // A `.scalar` node is always a leaf CBOR value, so it can be written directly
+        // without spinning up the iterative encoder's work stack.
+        case .scalar(let value): value.appendScalarBytes(to: &out)
+        case .container(let node): node.write(to: &out, options: options)
         }
     }
 }
 
 private protocol EncodingContainerNode: AnyObject {
-    var cbor: CBOR { get }
+    func write(to out: inout [UInt8], options: CBOROptions)
 }
 
 // MARK: - Scalar conversions
 
 private func cborFromSigned(_ value: Int64) -> CBOR {
     value < 0 ? .negativeInt(~UInt64(bitPattern: value)) : .unsignedInt(UInt64(value))
+}
+
+/// Encode a nested `Encodable` value into a node, special-casing `Data`.
+private func boxNode<T: Encodable>(
+    _ value: T, options: CBOROptions, codingPath: [any CodingKey]
+) throws -> EncodingNode {
+    #if FoundationSupport
+    if let data = value as? Data {
+        return .scalar(.byteString([UInt8](data)))
+    }
+    #endif
+    let encoder = _CBOREncoder(options: options, codingPath: codingPath)
+    try value.encode(to: encoder)
+    return encoder.asNode
+}
+
+/// Write a keyed container's entries as a CBOR map, sorted into RFC 8949 §4.2.1
+/// canonical order when deterministic. Keys are encoded once into a shared scratch
+/// buffer and sorted by byte range — no per-key allocation, no per-value buffering.
+private func writeMap(
+    _ entries: [(key: CBOR, node: EncodingNode)],
+    to out: inout [UInt8],
+    options: CBOROptions
+) {
+    // Keyed-container keys are always text-string scalars, so they can be written
+    // with `appendScalarBytes` (no work stack).
+    appendTypedArgument(major: 5, UInt64(entries.count), to: &out)
+    guard options.deterministic else {
+        for entry in entries {
+            entry.key.appendScalarBytes(to: &out)
+            entry.node.write(to: &out, options: options)
+        }
+        return
+    }
+    var keyBytes: [UInt8] = []
+    var ranges: [(start: Int, end: Int, index: Int)] = []
+    ranges.reserveCapacity(entries.count)
+    for (index, entry) in entries.enumerated() {
+        let start = keyBytes.count
+        entry.key.appendScalarBytes(to: &keyBytes)
+        ranges.append((start, keyBytes.count, index))
+    }
+    ranges.sort { keyRangeIsOrderedBefore(keyBytes, $0.start, $0.end, $1.start, $1.end) }
+    for range in ranges {
+        out.append(contentsOf: keyBytes[range.start..<range.end])
+        entries[range.index].node.write(to: &out, options: options)
+    }
 }
 
 // MARK: - Encoder
@@ -67,19 +128,18 @@ private final class _CBOREncoder: Encoder {
         self.codingPath = codingPath
     }
 
-    var cbor: CBOR { topContainer?.cbor ?? .null }
+    /// This encoder's result as a node (for nesting), or `null` if nothing was encoded.
+    var asNode: EncodingNode {
+        if let topContainer { return .container(topContainer) }
+        return .scalar(.null)
+    }
 
-    /// Encode any `Encodable` value into a CBOR value, special-casing `Data`
-    /// when Foundation support is enabled.
-    func box<T: Encodable>(_ value: T) throws -> CBOR {
-        #if FoundationSupport
-        if let data = value as? Data {
-            return .byteString([UInt8](data))
+    func write(to out: inout [UInt8], options: CBOROptions) {
+        if let topContainer {
+            topContainer.write(to: &out, options: options)
+        } else {
+            out.append(0xf6) // null
         }
-        #endif
-        let encoder = _CBOREncoder(options: options, codingPath: codingPath)
-        try value.encode(to: encoder)
-        return encoder.cbor
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
@@ -101,11 +161,13 @@ private final class _CBOREncoder: Encoder {
     }
 }
 
-/// Wraps a sub-encoder so its value is read lazily (used for `superEncoder`).
+/// Wraps a sub-encoder so its bytes are written lazily (used for `superEncoder`).
 private final class EncoderNode: EncodingContainerNode {
     let encoder: _CBOREncoder
     init(_ encoder: _CBOREncoder) { self.encoder = encoder }
-    var cbor: CBOR { encoder.cbor }
+    func write(to out: inout [UInt8], options: CBOROptions) {
+        encoder.write(to: &out, options: options)
+    }
 }
 
 // MARK: - Keyed container
@@ -120,37 +182,32 @@ private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtoc
         self.codingPath = codingPath
     }
 
-    var cbor: CBOR {
-        var map: [CBOR: CBOR] = .init(minimumCapacity: storage.count)
-        for entry in storage {
-            map[entry.key] = entry.node.cbor
-        }
-        return .map(map)
+    func write(to out: inout [UInt8], options: CBOROptions) {
+        writeMap(storage, to: &out, options: options)
     }
 
     private func append(_ node: EncodingNode, for key: Key) {
         storage.append((.textString(key.stringValue), node))
     }
 
-    func encodeNil(forKey key: Key) { append(.value(.null), for: key) }
-    func encode(_ value: Bool, forKey key: Key) { append(.value(.bool(value)), for: key) }
-    func encode(_ value: String, forKey key: Key) { append(.value(.textString(value)), for: key) }
-    func encode(_ value: Double, forKey key: Key) { append(.value(.double(value)), for: key) }
-    func encode(_ value: Float, forKey key: Key) { append(.value(.float(value)), for: key) }
-    func encode(_ value: Int, forKey key: Key) { append(.value(cborFromSigned(Int64(value))), for: key) }
-    func encode(_ value: Int8, forKey key: Key) { append(.value(cborFromSigned(Int64(value))), for: key) }
-    func encode(_ value: Int16, forKey key: Key) { append(.value(cborFromSigned(Int64(value))), for: key) }
-    func encode(_ value: Int32, forKey key: Key) { append(.value(cborFromSigned(Int64(value))), for: key) }
-    func encode(_ value: Int64, forKey key: Key) { append(.value(cborFromSigned(value)), for: key) }
-    func encode(_ value: UInt, forKey key: Key) { append(.value(.unsignedInt(UInt64(value))), for: key) }
-    func encode(_ value: UInt8, forKey key: Key) { append(.value(.unsignedInt(UInt64(value))), for: key) }
-    func encode(_ value: UInt16, forKey key: Key) { append(.value(.unsignedInt(UInt64(value))), for: key) }
-    func encode(_ value: UInt32, forKey key: Key) { append(.value(.unsignedInt(UInt64(value))), for: key) }
-    func encode(_ value: UInt64, forKey key: Key) { append(.value(.unsignedInt(value)), for: key) }
+    func encodeNil(forKey key: Key) { append(.scalar(.null), for: key) }
+    func encode(_ value: Bool, forKey key: Key) { append(.scalar(.bool(value)), for: key) }
+    func encode(_ value: String, forKey key: Key) { append(.scalar(.textString(value)), for: key) }
+    func encode(_ value: Double, forKey key: Key) { append(.scalar(.double(value)), for: key) }
+    func encode(_ value: Float, forKey key: Key) { append(.scalar(.float(value)), for: key) }
+    func encode(_ value: Int, forKey key: Key) { append(.scalar(cborFromSigned(Int64(value))), for: key) }
+    func encode(_ value: Int8, forKey key: Key) { append(.scalar(cborFromSigned(Int64(value))), for: key) }
+    func encode(_ value: Int16, forKey key: Key) { append(.scalar(cborFromSigned(Int64(value))), for: key) }
+    func encode(_ value: Int32, forKey key: Key) { append(.scalar(cborFromSigned(Int64(value))), for: key) }
+    func encode(_ value: Int64, forKey key: Key) { append(.scalar(cborFromSigned(value)), for: key) }
+    func encode(_ value: UInt, forKey key: Key) { append(.scalar(.unsignedInt(UInt64(value))), for: key) }
+    func encode(_ value: UInt8, forKey key: Key) { append(.scalar(.unsignedInt(UInt64(value))), for: key) }
+    func encode(_ value: UInt16, forKey key: Key) { append(.scalar(.unsignedInt(UInt64(value))), for: key) }
+    func encode(_ value: UInt32, forKey key: Key) { append(.scalar(.unsignedInt(UInt64(value))), for: key) }
+    func encode(_ value: UInt64, forKey key: Key) { append(.scalar(.unsignedInt(value)), for: key) }
 
     func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
-        let encoder = _CBOREncoder(options: options, codingPath: codingPath + [key])
-        append(.value(try encoder.box(value)), for: key)
+        append(try boxNode(value, options: options, codingPath: codingPath + [key]), for: key)
     }
 
     func nestedContainer<NestedKey: CodingKey>(
@@ -192,27 +249,31 @@ private final class UnkeyedContainer: UnkeyedEncodingContainer, EncodingContaine
 
     var count: Int { storage.count }
 
-    var cbor: CBOR { .array(storage.map(\.cbor)) }
+    func write(to out: inout [UInt8], options: CBOROptions) {
+        appendTypedArgument(major: 4, UInt64(storage.count), to: &out)
+        for node in storage {
+            node.write(to: &out, options: options)
+        }
+    }
 
-    func encodeNil() { storage.append(.value(.null)) }
-    func encode(_ value: Bool) { storage.append(.value(.bool(value))) }
-    func encode(_ value: String) { storage.append(.value(.textString(value))) }
-    func encode(_ value: Double) { storage.append(.value(.double(value))) }
-    func encode(_ value: Float) { storage.append(.value(.float(value))) }
-    func encode(_ value: Int) { storage.append(.value(cborFromSigned(Int64(value)))) }
-    func encode(_ value: Int8) { storage.append(.value(cborFromSigned(Int64(value)))) }
-    func encode(_ value: Int16) { storage.append(.value(cborFromSigned(Int64(value)))) }
-    func encode(_ value: Int32) { storage.append(.value(cborFromSigned(Int64(value)))) }
-    func encode(_ value: Int64) { storage.append(.value(cborFromSigned(value))) }
-    func encode(_ value: UInt) { storage.append(.value(.unsignedInt(UInt64(value)))) }
-    func encode(_ value: UInt8) { storage.append(.value(.unsignedInt(UInt64(value)))) }
-    func encode(_ value: UInt16) { storage.append(.value(.unsignedInt(UInt64(value)))) }
-    func encode(_ value: UInt32) { storage.append(.value(.unsignedInt(UInt64(value)))) }
-    func encode(_ value: UInt64) { storage.append(.value(.unsignedInt(value))) }
+    func encodeNil() { storage.append(.scalar(.null)) }
+    func encode(_ value: Bool) { storage.append(.scalar(.bool(value))) }
+    func encode(_ value: String) { storage.append(.scalar(.textString(value))) }
+    func encode(_ value: Double) { storage.append(.scalar(.double(value))) }
+    func encode(_ value: Float) { storage.append(.scalar(.float(value))) }
+    func encode(_ value: Int) { storage.append(.scalar(cborFromSigned(Int64(value)))) }
+    func encode(_ value: Int8) { storage.append(.scalar(cborFromSigned(Int64(value)))) }
+    func encode(_ value: Int16) { storage.append(.scalar(cborFromSigned(Int64(value)))) }
+    func encode(_ value: Int32) { storage.append(.scalar(cborFromSigned(Int64(value)))) }
+    func encode(_ value: Int64) { storage.append(.scalar(cborFromSigned(value))) }
+    func encode(_ value: UInt) { storage.append(.scalar(.unsignedInt(UInt64(value)))) }
+    func encode(_ value: UInt8) { storage.append(.scalar(.unsignedInt(UInt64(value)))) }
+    func encode(_ value: UInt16) { storage.append(.scalar(.unsignedInt(UInt64(value)))) }
+    func encode(_ value: UInt32) { storage.append(.scalar(.unsignedInt(UInt64(value)))) }
+    func encode(_ value: UInt64) { storage.append(.scalar(.unsignedInt(value))) }
 
     func encode<T: Encodable>(_ value: T) throws {
-        let encoder = _CBOREncoder(options: options, codingPath: codingPath)
-        storage.append(.value(try encoder.box(value)))
+        storage.append(try boxNode(value, options: options, codingPath: codingPath))
     }
 
     func nestedContainer<NestedKey: CodingKey>(
@@ -241,33 +302,34 @@ private final class UnkeyedContainer: UnkeyedEncodingContainer, EncodingContaine
 private final class SingleValueContainer: SingleValueEncodingContainer, EncodingContainerNode {
     let options: CBOROptions
     var codingPath: [any CodingKey]
-    private var node: EncodingNode = .value(.null)
+    private var node: EncodingNode = .scalar(.null)
 
     init(options: CBOROptions, codingPath: [any CodingKey]) {
         self.options = options
         self.codingPath = codingPath
     }
 
-    var cbor: CBOR { node.cbor }
+    func write(to out: inout [UInt8], options: CBOROptions) {
+        node.write(to: &out, options: options)
+    }
 
-    func encodeNil() { node = .value(.null) }
-    func encode(_ value: Bool) { node = .value(.bool(value)) }
-    func encode(_ value: String) { node = .value(.textString(value)) }
-    func encode(_ value: Double) { node = .value(.double(value)) }
-    func encode(_ value: Float) { node = .value(.float(value)) }
-    func encode(_ value: Int) { node = .value(cborFromSigned(Int64(value))) }
-    func encode(_ value: Int8) { node = .value(cborFromSigned(Int64(value))) }
-    func encode(_ value: Int16) { node = .value(cborFromSigned(Int64(value))) }
-    func encode(_ value: Int32) { node = .value(cborFromSigned(Int64(value))) }
-    func encode(_ value: Int64) { node = .value(cborFromSigned(value)) }
-    func encode(_ value: UInt) { node = .value(.unsignedInt(UInt64(value))) }
-    func encode(_ value: UInt8) { node = .value(.unsignedInt(UInt64(value))) }
-    func encode(_ value: UInt16) { node = .value(.unsignedInt(UInt64(value))) }
-    func encode(_ value: UInt32) { node = .value(.unsignedInt(UInt64(value))) }
-    func encode(_ value: UInt64) { node = .value(.unsignedInt(value)) }
+    func encodeNil() { node = .scalar(.null) }
+    func encode(_ value: Bool) { node = .scalar(.bool(value)) }
+    func encode(_ value: String) { node = .scalar(.textString(value)) }
+    func encode(_ value: Double) { node = .scalar(.double(value)) }
+    func encode(_ value: Float) { node = .scalar(.float(value)) }
+    func encode(_ value: Int) { node = .scalar(cborFromSigned(Int64(value))) }
+    func encode(_ value: Int8) { node = .scalar(cborFromSigned(Int64(value))) }
+    func encode(_ value: Int16) { node = .scalar(cborFromSigned(Int64(value))) }
+    func encode(_ value: Int32) { node = .scalar(cborFromSigned(Int64(value))) }
+    func encode(_ value: Int64) { node = .scalar(cborFromSigned(value)) }
+    func encode(_ value: UInt) { node = .scalar(.unsignedInt(UInt64(value))) }
+    func encode(_ value: UInt8) { node = .scalar(.unsignedInt(UInt64(value))) }
+    func encode(_ value: UInt16) { node = .scalar(.unsignedInt(UInt64(value))) }
+    func encode(_ value: UInt32) { node = .scalar(.unsignedInt(UInt64(value))) }
+    func encode(_ value: UInt64) { node = .scalar(.unsignedInt(value)) }
 
     func encode<T: Encodable>(_ value: T) throws {
-        let encoder = _CBOREncoder(options: options, codingPath: codingPath)
-        node = .value(try encoder.box(value))
+        node = try boxNode(value, options: options, codingPath: codingPath)
     }
 }
