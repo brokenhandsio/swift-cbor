@@ -32,6 +32,17 @@ let package = Package(
             targets: ["CBOR"]
         ),
     ],
+    traits: [
+        .trait(
+            name: "FoundationSupport",
+            description: """
+                Enables Foundation-backed conveniences in the Codable bridge — most \
+                notably encoding/decoding `Data` as a CBOR byte string. Enabled by \
+                default; disable it to build the library without linking Foundation.
+                """
+        ),
+        .default(enabledTraits: ["FoundationSupport"]),
+    ],
     dependencies: [
         // Benchmarking harness. >= 1.35.0 no longer requires jemalloc / system deps.
         .package(url: "https://github.com/ordo-one/benchmark", from: "1.35.0"),

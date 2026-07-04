@@ -1,6 +1,8 @@
 import Testing
-import Foundation
 import CBOR
+#if FoundationSupport
+import Foundation
+#endif
 
 private struct Point: Codable, Equatable {
     var x: Int
@@ -105,6 +107,7 @@ struct CodableRoundTripTests {
         #expect(try CBORDecoder().decode(Suit.self, from: bytes(fromHex: "66737061646573")) == .spades)
     }
 
+    #if FoundationSupport
     @Test("Data encodes to a CBOR byte string")
     func dataAsByteString() throws {
         struct Blob: Codable, Equatable { var payload: Data }
@@ -116,4 +119,5 @@ struct CodableRoundTripTests {
         let decoded = try CBORDecoder().decode(Blob.self, from: bytes)
         #expect(decoded == blob)
     }
+    #endif
 }

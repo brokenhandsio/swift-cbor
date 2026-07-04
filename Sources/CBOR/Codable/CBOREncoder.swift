@@ -1,7 +1,9 @@
+#if FoundationSupport
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
 import Foundation
+#endif
 #endif
 
 /// Encodes Swift `Encodable` values to CBOR bytes, mirroring `JSONEncoder`.
@@ -67,11 +69,14 @@ private final class _CBOREncoder: Encoder {
 
     var cbor: CBOR { topContainer?.cbor ?? .null }
 
-    /// Encode any `Encodable` value into a CBOR value, special-casing `Data`.
+    /// Encode any `Encodable` value into a CBOR value, special-casing `Data`
+    /// when Foundation support is enabled.
     func box<T: Encodable>(_ value: T) throws -> CBOR {
+        #if FoundationSupport
         if let data = value as? Data {
             return .byteString([UInt8](data))
         }
+        #endif
         let encoder = _CBOREncoder(options: options, codingPath: codingPath)
         try value.encode(to: encoder)
         return encoder.cbor

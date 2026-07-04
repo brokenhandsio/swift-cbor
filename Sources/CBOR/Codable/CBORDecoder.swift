@@ -1,7 +1,9 @@
+#if FoundationSupport
 #if canImport(FoundationEssentials)
 import FoundationEssentials
 #else
 import Foundation
+#endif
 #endif
 
 /// Decodes CBOR bytes into Swift `Decodable` values, mirroring `JSONDecoder`.
@@ -62,14 +64,17 @@ private final class _CBORDecoder: Decoder {
         SingleValueContainer(cbor: cbor, options: options, codingPath: codingPath)
     }
 
-    /// Decode any `Decodable` type from a CBOR value, special-casing `Data`.
+    /// Decode any `Decodable` type from a CBOR value, special-casing `Data`
+    /// when Foundation support is enabled.
     func unbox<T: Decodable>(_ cbor: CBOR, as type: T.Type) throws -> T {
+        #if FoundationSupport
         if type == Data.self {
             guard case .byteString(let bytes) = cbor else {
                 throw typeMismatch(Data.self, cbor, codingPath)
             }
             return Data(bytes) as! T
         }
+        #endif
         let decoder = _CBORDecoder(cbor: cbor, options: options, codingPath: codingPath)
         return try T(from: decoder)
     }

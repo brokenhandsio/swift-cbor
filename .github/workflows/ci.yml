@@ -43,6 +43,19 @@ jobs:
       - name: Test
         run: swift test
 
+  linux-test-no-foundation:
+    name: Test (Linux, FoundationSupport disabled)
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    steps:
+      - uses: actions/checkout@v7
+      # Guards against re-introducing a hard Foundation dependency in the core
+      # library. The Data-specific Codable test compiles out under this trait.
+      - name: Build (traits disabled)
+        run: swift build --disable-default-traits
+      - name: Test (traits disabled)
+        run: swift test --disable-default-traits
+
   linux-benchmark:
     name: Benchmarks (Linux)
     runs-on: ubuntu-latest
