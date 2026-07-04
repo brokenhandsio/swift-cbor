@@ -34,7 +34,7 @@ let package = Package(
     ],
     dependencies: [
         // Benchmarking harness. >= 1.35.0 no longer requires jemalloc / system deps.
-        .package(url: "https://github.com/ordo-one/package-benchmark", from: "1.35.0"),
+        .package(url: "https://github.com/ordo-one/benchmark", from: "1.35.0"),
     ],
     targets: [
         // The library itself. Strict memory safety and the modern language features
@@ -55,11 +55,11 @@ let package = Package(
             name: "CBORBenchmarks",
             dependencies: [
                 "CBOR",
-                .product(name: "Benchmark", package: "package-benchmark"),
+                .product(name: "Benchmark", package: "benchmark"),
             ],
             path: "Benchmarks/CBORBenchmarks",
             plugins: [
-                .plugin(name: "BenchmarkPlugin", package: "package-benchmark"),
+                .plugin(name: "BenchmarkPlugin", package: "benchmark"),
             ]
         ),
     ]
