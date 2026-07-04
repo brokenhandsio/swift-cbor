@@ -107,7 +107,7 @@ extension CBOR {
 
 /// Bytewise lexicographic ordering of two ranges within the same buffer, where a
 /// shorter range that is a prefix of the other sorts first (RFC 8949 §4.2.1).
-private func keyRangeIsOrderedBefore(
+func keyRangeIsOrderedBefore(
     _ buffer: [UInt8],
     _ aStart: Int, _ aEnd: Int,
     _ bStart: Int, _ bEnd: Int
@@ -125,7 +125,7 @@ private func keyRangeIsOrderedBefore(
 // MARK: - Head / argument encoding
 
 /// Append a major-type head with its argument, using the shortest form.
-private func appendTypedArgument(major: UInt8, _ value: UInt64, to out: inout [UInt8]) {
+func appendTypedArgument(major: UInt8, _ value: UInt64, to out: inout [UInt8]) {
     let head = major << 5
     switch value {
     case 0..<24:
