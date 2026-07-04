@@ -75,26 +75,51 @@ extension CBOR {
     }
 
     private func appendMapBody(_ entries: [CBOR: CBOR], to out: inout [UInt8], options: CBOROptions) {
-        if options.deterministic {
-            // RFC 8949 §4.2.1: sort by the bytewise lexicographic order of the
-            // encoded keys. Array<UInt8> comparison is exactly that ordering.
-            var encodedKeys: [(key: [UInt8], value: CBOR)] = []
-            encodedKeys.reserveCapacity(entries.count)
-            for (key, value) in entries {
-                encodedKeys.append((key.encode(options: options), value))
-            }
-            encodedKeys.sort { $0.key.lexicographicallyPrecedes($1.key) }
-            for entry in encodedKeys {
-                out.append(contentsOf: entry.key)
-                entry.value.appendEncoding(to: &out, options: options)
-            }
-        } else {
+        guard options.deterministic else {
             for (key, value) in entries {
                 key.appendEncoding(to: &out, options: options)
                 value.appendEncoding(to: &out, options: options)
             }
+            return
+        }
+
+        // RFC 8949 §4.2.1: emit entries sorted by the bytewise lexicographic order
+        // of their encoded keys. Rather than allocating a separate buffer per key,
+        // encode every key into one shared scratch buffer, remember each key's byte
+        // range, and sort by comparing ranges within that buffer.
+        var keyBytes: [UInt8] = []
+        var sortedEntries: [(start: Int, end: Int, value: CBOR)] = []
+        sortedEntries.reserveCapacity(entries.count)
+        for (key, value) in entries {
+            let start = keyBytes.count
+            key.appendEncoding(to: &keyBytes, options: options)
+            sortedEntries.append((start, keyBytes.count, value))
+        }
+        sortedEntries.sort { lhs, rhs in
+            keyRangeIsOrderedBefore(keyBytes, lhs.start, lhs.end, rhs.start, rhs.end)
+        }
+        for entry in sortedEntries {
+            out.append(contentsOf: keyBytes[entry.start..<entry.end])
+            entry.value.appendEncoding(to: &out, options: options)
         }
     }
+}
+
+/// Bytewise lexicographic ordering of two ranges within the same buffer, where a
+/// shorter range that is a prefix of the other sorts first (RFC 8949 §4.2.1).
+private func keyRangeIsOrderedBefore(
+    _ buffer: [UInt8],
+    _ aStart: Int, _ aEnd: Int,
+    _ bStart: Int, _ bEnd: Int
+) -> Bool {
+    var a = aStart
+    var b = bStart
+    while a < aEnd, b < bEnd {
+        if buffer[a] != buffer[b] { return buffer[a] < buffer[b] }
+        a += 1
+        b += 1
+    }
+    return (aEnd - aStart) < (bEnd - bStart)
 }
 
 // MARK: - Head / argument encoding

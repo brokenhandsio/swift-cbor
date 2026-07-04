@@ -60,9 +60,13 @@ struct Point: Codable { var x: Int; var y: Int }
 // MARK: - Benchmarks
 
 let benchmarks: @Sendable () -> Void = {
+    // Instruction count and allocation count are deterministic across runs, so they
+    // make reliable regression gates — unlike wall-clock time, which is noisy.
+    // Peak resident memory tracks the high-water mark of the working set.
     Benchmark.defaultConfiguration.metrics = [
-        .wallClock, .throughput, .mallocCountTotal, .peakMemoryResident,
+        .instructions, .mallocCountTotal, .peakMemoryResident,
     ]
+    Benchmark.defaultConfiguration.maxIterations = 100_000
 
     Benchmark("Decode/COSE key") { benchmark in
         for _ in benchmark.scaledIterations {
