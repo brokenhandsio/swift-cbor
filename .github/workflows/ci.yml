@@ -9,6 +9,13 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  # Run the (otherwise opt-in) deep generative fuzz pass in every test job.
+  CBOR_FUZZ_DEEP: "1"
+  # The TEST_RUNNER_-prefixed variant is forwarded (prefix stripped) into the
+  # iOS test runner process by xcodebuild.
+  TEST_RUNNER_CBOR_FUZZ_DEEP: "1"
+
 jobs:
   macos-test:
     name: Test (macOS)
