@@ -6,6 +6,7 @@ extension CBOR {
     ///
     /// For arrays the key must be an `.unsignedInt` index that is in bounds.
     /// Returns `nil` for any other receiver, a missing key, or an out-of-range index.
+    @inlinable
     public subscript(key: CBOR) -> CBOR? {
         switch self {
         case .map(let map):
@@ -21,6 +22,7 @@ extension CBOR {
     }
 
     /// Look up a value in a `.map` by a text-string key.
+    @inlinable
     public subscript(key: String) -> CBOR? {
         self[.textString(key)]
     }
@@ -31,6 +33,7 @@ extension CBOR {
     ///
     /// Handles both `.unsignedInt` and `.negativeInt` (applying the `-1 - n`
     /// convention). Returns `nil` for non-integers or values outside `Int`'s range.
+    @inlinable
     public var int: Int? {
         switch self {
         case .unsignedInt(let value):
@@ -44,36 +47,42 @@ extension CBOR {
     }
 
     /// The value as a `UInt64` if this is an `.unsignedInt`.
+    @inlinable
     public var uint64: UInt64? {
         guard case .unsignedInt(let value) = self else { return nil }
         return value
     }
 
     /// The bytes if this is a `.byteString`.
+    @inlinable
     public var bytes: [UInt8]? {
         guard case .byteString(let bytes) = self else { return nil }
         return bytes
     }
 
     /// The string if this is a `.textString`.
+    @inlinable
     public var string: String? {
         guard case .textString(let string) = self else { return nil }
         return string
     }
 
     /// The elements if this is an `.array`.
+    @inlinable
     public var arrayValue: [CBOR]? {
         guard case .array(let array) = self else { return nil }
         return array
     }
 
     /// The entries if this is a `.map`.
+    @inlinable
     public var mapValue: [CBOR: CBOR]? {
         guard case .map(let map) = self else { return nil }
         return map
     }
 
     /// The boolean if this is a `.bool`.
+    @inlinable
     public var boolValue: Bool? {
         guard case .bool(let value) = self else { return nil }
         return value
@@ -81,6 +90,7 @@ extension CBOR {
 
     /// The floating-point value if this is a `.half`, `.float` or `.double`,
     /// widened to `Double`.
+    @inlinable
     public var doubleValue: Double? {
         switch self {
         case .half(let value):
@@ -95,6 +105,7 @@ extension CBOR {
     }
 
     /// Whether this is the `.null` value.
+    @inlinable
     public var isNull: Bool {
         if case .null = self { return true }
         return false

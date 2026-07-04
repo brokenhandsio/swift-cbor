@@ -98,16 +98,19 @@ private func outOfRange(_ type: Any.Type, _ codingPath: [any CodingKey]) -> Deco
 
 // MARK: - Scalar unboxing
 
+@inline(__always)
 private func unboxBool(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> Bool {
     guard case .bool(let value) = cbor else { throw typeMismatch(Bool.self, cbor, codingPath) }
     return value
 }
 
+@inline(__always)
 private func unboxString(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> String {
     guard case .textString(let value) = cbor else { throw typeMismatch(String.self, cbor, codingPath) }
     return value
 }
 
+@inline(__always)
 private func unboxDouble(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> Double {
     switch cbor {
     case .half(let value): return Double(value)
@@ -117,6 +120,7 @@ private func unboxDouble(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> 
     }
 }
 
+@inline(__always)
 private func unboxFloat(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> Float {
     switch cbor {
     case .half(let value): return Float(value)
@@ -126,6 +130,7 @@ private func unboxFloat(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> F
     }
 }
 
+@inline(__always)
 private func unboxSigned<T: FixedWidthInteger & SignedInteger>(
     _ cbor: CBOR, _ type: T.Type, _ codingPath: [any CodingKey]
 ) throws -> T {
@@ -144,6 +149,7 @@ private func unboxSigned<T: FixedWidthInteger & SignedInteger>(
     return result
 }
 
+@inline(__always)
 private func unboxUnsigned<T: FixedWidthInteger & UnsignedInteger>(
     _ cbor: CBOR, _ type: T.Type, _ codingPath: [any CodingKey]
 ) throws -> T {

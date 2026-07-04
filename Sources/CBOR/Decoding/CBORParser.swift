@@ -24,6 +24,7 @@ enum CBORParser {
 
         /// Incorporate a completed child `value`. Returns the finished container when
         /// this frame is now complete, otherwise `nil`.
+        @inline(__always)
         mutating func accept(_ value: CBOR, rejectDuplicates: Bool) throws -> CBOR? {
             switch kind {
             case .array:
@@ -70,8 +71,12 @@ enum CBORParser {
 
         while true {
             // A `break` (0xFF) closes the innermost indefinite-length container.
-            if let top = stack.last, top.isIndefinite,
-               offset < span.count, span[offset] == 0xff {
+            // The `span[offset] == 0xff` test is checked first so the common path
+            // (any non-break byte) never touches the frame — reading `stack.last`
+            // would otherwise copy the whole frame (and retain its arrays) here on
+            // every single iteration.
+            if offset < span.count, span[offset] == 0xff,
+               !stack.isEmpty, stack[stack.count - 1].isIndefinite {
                 offset += 1
                 let frame = stack.removeLast()
                 let completed: CBOR
@@ -171,6 +176,7 @@ enum CBORParser {
 
     /// Attach a completed value to the innermost open container, cascading upward as
     /// containers fill. Returns the top-level value once the stack is empty.
+    @inline(__always)
     private static func attach(
         _ value: CBOR,
         to stack: inout [Frame],
@@ -190,6 +196,7 @@ enum CBORParser {
 
     // MARK: Primitive reads
 
+    @inline(__always)
     private static func readByte(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt8 {
         guard offset < span.count else { throw CBORError.unexpectedEnd }
         let byte = span[offset]
@@ -198,6 +205,7 @@ enum CBORParser {
     }
 
     /// Read the argument that follows a head byte's additional-information value.
+    @inline(__always)
     private static func readArgument(
         _ additional: UInt8,
         _ span: Span<UInt8>,
@@ -233,12 +241,14 @@ enum CBORParser {
         return count
     }
 
+    @inline(__always)
     private static func readUInt16(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt16 {
         let high = try readByte(span, &offset)
         let low = try readByte(span, &offset)
         return UInt16(high) << 8 | UInt16(low)
     }
 
+    @inline(__always)
     private static func readUInt32(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt32 {
         var result: UInt32 = 0
         for _ in 0..<4 {
@@ -247,6 +257,7 @@ enum CBORParser {
         return result
     }
 
+    @inline(__always)
     private static func readUInt64(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt64 {
         var result: UInt64 = 0
         for _ in 0..<8 {
