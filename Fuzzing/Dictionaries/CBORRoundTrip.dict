@@ -1,0 +1,41 @@
+# CBOR structural tokens, for libFuzzer's -dict.
+#
+# The initial byte of a CBOR item encodes major type in its top 3 bits and
+# either a small value or a length-of-length in the bottom 5. Giving the mutator
+# these bytes directly saves it from rediscovering the framing by chance.
+
+# Major-type heads with a 0-length payload
+empty_array="\x80"
+empty_map="\xa0"
+empty_bytes="\x40"
+empty_text="\x60"
+
+# Indefinite-length heads and the break code that must terminate them
+indefinite_bytes="\x5f"
+indefinite_text="\x7f"
+indefinite_array="\x9f"
+indefinite_map="\xbf"
+break="\xff"
+
+# Length-of-length prefixes: these are where overflow and huge-allocation bugs
+# live, so the mutator should reach them early.
+uint8_follows="\x18"
+uint16_follows="\x19"
+uint32_follows="\x1a"
+uint64_follows="\x1b"
+
+# Simple values and floats
+false="\xf4"
+true="\xf5"
+null="\xf6"
+undefined="\xf7"
+half_float="\xf9"
+single_float="\xfa"
+double_float="\xfb"
+
+# Tags
+tag_datetime_string="\xc0"
+tag_epoch="\xc1"
+tag_bignum_positive="\xc2"
+tag_bignum_negative="\xc3"
+self_describe="\xd9\xd9\xf7"

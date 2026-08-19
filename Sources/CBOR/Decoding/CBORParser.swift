@@ -2,10 +2,15 @@
 ///
 /// Nested containers are tracked on an explicit heap-allocated stack rather than
 /// via native recursion, so the parser's native stack usage is O(1) regardless of
-/// how deeply the input nests. `CBOROptions.maximumDepth` therefore bounds only the
-/// (cheap) heap stack and cannot be turned into a stack overflow — decoding hostile,
-/// deeply nested input fails with ``CBORError/maxDepthExceeded(_:)`` instead of
-/// trapping.
+/// how deeply the input nests. Decoding hostile, deeply nested input fails with
+/// ``CBORError/maxDepthExceeded(_:)`` instead of trapping.
+///
+/// Depth is capped at ``CBOROptions/maximumSupportedDepth`` regardless of what
+/// ``CBOROptions/maximumDepth`` requests. Parsing itself would happily go deeper —
+/// its stack is on the heap — but the resulting value is a recursive tree that the
+/// Swift runtime tears down recursively when it is released, and that recursion is
+/// not something this library can intercept. Refusing to build such a value is the
+/// only way to keep the promise that decoding untrusted bytes cannot crash.
 ///
 /// All reads go through `Span`'s bounds-checked subscript, so the parser is fully
 /// memory-safe (no `unsafe`, no pointer arithmetic).
@@ -65,7 +70,10 @@ enum CBORParser {
         _ offset: inout Int,
         options: CBOROptions
     ) throws -> CBOR {
-        let maxDepth = options.maximumDepth
+        // Clamped, not trusted: a value nested deeper than this decodes fine and
+        // then overflows the stack when the runtime releases it. See
+        // `CBOROptions.maximumSupportedDepth`.
+        let maxDepth = min(options.maximumDepth, CBOROptions.maximumSupportedDepth)
         let rejectDuplicates = options.rejectDuplicateMapKeys
         var stack: [Frame] = []
 

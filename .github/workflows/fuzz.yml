@@ -1,0 +1,102 @@
+name: Fuzz
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # 03:17 UTC daily. Off the hour to avoid GitHub's scheduler backlog.
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: "Soak duration per target, in seconds"
+        default: "600"
+
+concurrency:
+  # Scheduled soaks are keyed per-run so a nightly is never cancelled by a push.
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'schedule' && github.run_id || '' }}
+  cancel-in-progress: true
+
+jobs:
+  # Fast regression gate: replays the committed corpus and every saved crash
+  # artefact once each, mutating nothing. Seconds, not minutes.
+  replay:
+    name: Replay (${{ matrix.target }})
+    # Runs on the schedule too: the soak starts from the corpus but never
+    # replays Crashes/, so without this a regression against a previously-fixed
+    # bug would not be caught by the nightly.
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: CBORDecode
+            args: ""
+          - target: CBORRoundTrip
+            args: ""
+          # One input byte is one level of nesting, so this target needs inputs
+          # far larger than libFuzzer's 4096-byte default to be worth running.
+          - target: CBORDeepNesting
+            args: "-max_len=65536"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Replay corpus and saved crashes
+        working-directory: Fuzzing
+        run: |
+          swift package --allow-writing-to-package-directory \
+            fuzz ${{ matrix.target }} --replay ${{ matrix.args }}
+
+  # The job that actually finds things.
+  soak:
+    name: Soak (${{ matrix.target }})
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    # Comfortably above the soak duration: the instrumented build has to happen
+    # first, and a crash triggers minimization-free but non-instant teardown.
+    timeout-minutes: 45
+    strategy:
+      # One target crashing must not cancel the others' search.
+      fail-fast: false
+      matrix:
+        include:
+          - target: CBORDecode
+            args: ""
+          - target: CBORRoundTrip
+            args: ""
+          - target: CBORDeepNesting
+            args: "-max_len=65536"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fuzz
+        working-directory: Fuzzing
+        run: |
+          swift package --allow-writing-to-package-directory \
+            fuzz ${{ matrix.target }} \
+            --time ${{ github.event.inputs.seconds || '600' }} ${{ matrix.args }}
+
+      # The container is discarded when the job ends, so a crashing input that
+      # is not uploaded is lost and the finding is unreproducible.
+      - name: Upload crashing inputs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: crashes-${{ matrix.target }}
+          path: Fuzzing/Crashes/${{ matrix.target }}/
+          if-no-files-found: ignore
+
+      # Whatever new coverage the soak found. Not committed automatically: the
+      # working corpus is mostly redundant and wants `-merge=1` first. Download,
+      # minimize locally, commit. See swift-fuzz's README, "Corpus hygiene".
+      - name: Upload corpus
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: corpus-${{ matrix.target }}
+          path: Fuzzing/Corpus/${{ matrix.target }}/
+          if-no-files-found: ignore
+          retention-days: 14
