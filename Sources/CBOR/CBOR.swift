@@ -4,6 +4,28 @@
 /// when encoding. Each case corresponds to a CBOR major type or a well-known
 /// major-type-7 simple value.
 ///
+/// ## Nesting depth
+///
+/// `CBOR` is a recursive value type: an array holds `[CBOR]`, whose elements hold
+/// more. Parsing, encoding and equality all walk that structure iteratively, and
+/// hashing is depth-bounded, so none of them recurse. *Releasing* a value is done
+/// by the Swift runtime, which does recurse — roughly 280 bytes of stack per level.
+/// That is fine at any depth real data reaches, but a value nested many thousands
+/// deep can overflow the stack when it goes out of scope, and the exact limit
+/// depends on the stack it is released on: around 30,000 levels on an 8 MB main
+/// thread, but only around 1,800 on the 512 KB threads Swift concurrency uses.
+///
+/// Decoding cannot produce such a value: it is capped at
+/// ``CBOROptions/maximumSupportedDepth``, and both ``CBOR/decode(_:options:)-(Span<UInt8>,_)``
+/// and ``CBORDecoder`` go through that cap. Nothing else in this library builds
+/// nested values either, so the limit is only reachable by writing a loop that
+/// deliberately nests one — which no real code does.
+///
+/// If you convert *untrusted* data from another format into `CBOR` yourself, bound
+/// your own recursion the way the decoder does; this type cannot do it for you,
+/// because a public enum case can be constructed directly and Swift offers no way
+/// to intercept that.
+///
 /// [RFC 8949]: https://www.rfc-editor.org/rfc/rfc8949.html
 @nonexhaustive
 public enum CBOR: Sendable, Hashable {

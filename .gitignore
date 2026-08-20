@@ -9,3 +9,6 @@ DerivedData/
 .vscode/
 /Package.resolved
 /Benchmarks/.benchmarkBaselines/
+
+# ordo-one/benchmark writes baselines here when run from the package root.
+/.benchmarkBaselines/

@@ -1,0 +1,16 @@
+.build/
+
+# libFuzzer's per-worker logs, written to the working directory by --jobs.
+/fuzz-*.log
+
+# Artefacts libFuzzer drops in the working directory when the built binary is
+# run by hand without -artifact_prefix. `swift package fuzz` always passes one,
+# so these only appear from direct invocations.
+#
+# The leading slash is load-bearing: an unanchored `crash-*` matches at any
+# depth and would hide new artefacts in Crashes/, which are the single most
+# important thing to notice in `git status`.
+/crash-*
+/leak-*
+/timeout-*
+/oom-*
