@@ -21,7 +21,7 @@ let fuzzTargets: @Sendable () -> Void = {
     // first cycle normalises, and NaN encodes to stable bytes even though it
     // never compares equal to itself.
     FuzzTarget("CBORRoundTrip") { bytes in
-        guard let first = try? CBOR.decode(Array(bytes)) else { return }
+        guard let first = try? CBOR.decode(bytes) else { return }
         let once = first.encode()
 
         guard let second = try? CBOR.decode(once) else {

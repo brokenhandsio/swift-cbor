@@ -40,6 +40,10 @@ jobs:
           # far larger than libFuzzer's 4096-byte default to be worth running.
           - target: CBORDeepNesting
             args: "-max_len=65536"
+          # Three control values off the back, the rest passed through as
+          # ordinary CBOR, so libFuzzer's default length limit is fine.
+          - target: CBOROptions
+            args: ""
     steps:
       - uses: actions/checkout@v7
 
@@ -69,6 +73,10 @@ jobs:
             args: ""
           - target: CBORDeepNesting
             args: "-max_len=65536"
+          # Three control values off the back, the rest passed through as
+          # ordinary CBOR, so libFuzzer's default length limit is fine.
+          - target: CBOROptions
+            args: ""
     steps:
       - uses: actions/checkout@v7
 
