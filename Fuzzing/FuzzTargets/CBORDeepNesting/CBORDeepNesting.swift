@@ -15,6 +15,6 @@ let fuzzTargets: @Sendable () -> Void = {
     let options = CBOROptions(maximumDepth: .max)
 
     FuzzTarget("CBORDeepNesting") { bytes in
-        _ = try? CBOR.decode(Array(bytes), options: options)
+        _ = try? CBOR.decode(bytes, options: options)
     }
 }
