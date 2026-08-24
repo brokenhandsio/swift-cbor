@@ -148,6 +148,11 @@ let value = try CBOR.decode(bytes, options: options)
 
 `CBOROptions` also controls `deterministic` encoding, which is on by default.
 
+`maximumDepth` is bounded by `CBOROptions.maximumSupportedDepth` (1024). Raising
+`maximumDepth` above it has no effect — decoding still stops at the ceiling. That
+bound is not a preference, it is the thing that keeps the guarantee in
+**[Limits](#limits)** true whatever a caller passes.
+
 ### Tags
 
 Tagged items use `CBORTag`, which comes with the common IANA tags:
@@ -205,10 +210,17 @@ CBOR_BENCHMARK=1 swift package benchmark
 ```
 
 They cover COSE-key decode/encode, large array/map throughput, full round-trips, and
-the Codable bridge. CI gates regressions on **instruction count** and **allocation
-count** — deterministic metrics — alongside peak resident memory. swift-cbor has been
-benchmarked against other Swift CBOR libraries and shows improvements across both
-allocation count and instruction count.
+the Codable bridge.
+
+CI gates on **allocation count**, which is deterministic. The p90 for each benchmark is
+pinned in `Thresholds/` and checked by `swift package benchmark thresholds check`; a run
+that allocates more fails the build, and so does one that allocates less, so an
+improvement is recorded deliberately rather than absorbed silently.
+
+Instruction count is collected locally but **not** on CI — GitHub's containers do not
+expose the perf counters it needs, so the metric is simply absent from the Linux run.
+Peak resident memory is reported for information and is not gated: it is a whole-process
+high-water mark that moves with allocator behaviour and runner image.
 
 ## Limits
 
@@ -218,6 +230,43 @@ exhaust the stack. Decoding and encoding themselves are fully iterative and neve
 recurse on input nesting, and `CBOROptions.maximumDepth` (default 512) bounds how deep
 a decoded value can be, so values decoded from untrusted input free safely on ordinary
 stacks. Lower `maximumDepth` if you decode on threads with unusually small stacks.
+
+Raising it does not remove the bound: `maximumSupportedDepth` (1024) is a hard ceiling
+the decoder applies regardless. Without it, `maximumDepth` would be a guard a caller
+could switch off by accident — the depth at which the runtime's own deallocation
+overflows the stack is a property of the platform, not something the caller gets to
+choose. Both this and the recursive-hashing overflow beside it were found by fuzzing.
+
+## Fuzzing
+
+The safety claims above are continuously tested rather than asserted. The library is
+fuzzed with [swift-fuzz](https://github.com/brokenhandsio/swift-fuzz), which builds
+libFuzzer harnesses against the real API:
+
+| Target | Covers |
+| --- | --- |
+| `CBORDecode` | Decoding arbitrary bytes |
+| `CBORRoundTrip` | Decode, re-encode, decode again — asserting a fixed point |
+| `CBORDeepNesting` | Nesting depth, with inputs far larger than libFuzzer's default |
+| `CBOROptions` | The options themselves: depth limit, duplicate-key rejection, determinism |
+| `CBORDecodeFirst` | That `decodeFirst` never reports consuming more bytes than it was given |
+| `CBORCodable` | The `Codable` bridge, asserting a deterministic encode fixed point |
+
+Four bugs have been found this way and all four are fixed: float identity on map keys
+(`NaN != NaN` broke maps with NaN keys), recursive hashing overflowing the stack,
+recursive deallocation — bounded rather than fixed, which is what `maximumSupportedDepth`
+is for — and a force-unwrap in `superEncoder()`.
+
+CI runs two jobs. A **replay** gate on every push and pull request re-runs the committed
+corpus and every saved crash artefact, so a previously-fixed bug cannot come back
+unnoticed. A nightly **soak** fuzzes each target for ten minutes and uploads anything it
+finds. Corpora and crash artefacts live in `Fuzzing/` and are committed deliberately:
+they are the regression suite.
+
+```sh
+cd Fuzzing
+swift package --allow-writing-to-package-directory fuzz CBORDecode --time 60
+```
 
 ## License
 

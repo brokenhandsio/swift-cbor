@@ -150,6 +150,12 @@ jobs:
       - name: Run benchmarks
         run: swift package --disable-sandbox benchmark
 
+      # Gates allocation count against the pinned p90s in Thresholds/. Separate
+      # from the run above so a threshold failure is distinguishable from the
+      # benchmarks failing to run at all.
+      - name: Check allocation thresholds
+        run: swift package --disable-sandbox benchmark thresholds check
+
   docs:
     name: DocC archive
     runs-on: ubuntu-latest
