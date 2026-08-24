@@ -64,6 +64,74 @@ jobs:
       - name: Test (traits disabled)
         run: swift test --disable-default-traits
 
+  # Foundation is meant to be optional here, and "optional" has two halves that
+  # need checking separately.
+  #
+  # `linux-test-no-foundation` above proves the library *compiles* with the
+  # trait off. It cannot prove nothing *links* Foundation — a compile-only check
+  # passes happily while some path still drags the library in. So this builds a
+  # throwaway executable against the CBOR product and asks `ldd` what actually
+  # came along, in both configurations:
+  #
+  #   trait enabled  — FoundationEssentials is expected and fine; full
+  #                    Foundation and the ICU libraries are not.
+  #   trait disabled — nothing Foundation-family at all.
+  #
+  # Adapted from vapor/ci's check-foundation-linking.yml, which cannot be reused
+  # directly because it has no way to select package traits.
+  foundation-linking:
+    name: Foundation linking (${{ matrix.config }})
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - config: default traits
+            traits: ""
+          - config: traits disabled
+            traits: ", traits: []"
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Build a check executable and inspect its linkage
+        run: |
+          set -uo pipefail
+          fatal() { echo "::error::$*"; exit 1; }
+
+          shim="$(mktemp -d)"
+          mkdir -p "$shim/Sources/check"
+          touch "$shim/Sources/check/main.swift"
+          cat > "$shim/Package.swift" <<EOF
+          // swift-tools-version: 6.3
+          import PackageDescription
+          let package = Package(
+              name: "check",
+              dependencies: [.package(name: "swift-cbor", path: "$GITHUB_WORKSPACE"${{ matrix.traits }})],
+              targets: [.executableTarget(name: "check", dependencies: [.product(name: "CBOR", package: "swift-cbor")])]
+          )
+          EOF
+
+          swift build --package-path "$shim" -c release || fatal "the check executable did not build"
+          binary="$(swift build --package-path "$shim" -c release --show-bin-path)/check"
+          # Without this, a failed build leaves ldd with nothing to inspect, no
+          # library names to match, and the loop below reports a clean pass.
+          [ -f "$binary" ] || fatal "$binary does not exist, so nothing was checked"
+
+          linked="$(ldd "$binary" | awk '{print $1}' | grep -iE 'foundation|icu')"
+          echo "Foundation-family libraries linked: ${linked:-(none)}"
+
+          found=0
+          for lib in libFoundation.so libFoundationInternationalization.so lib_FoundationICU.so; do
+            if echo "$linked" | grep -qx "$lib"; then
+              echo "::error::$lib is linked"
+              found=1
+            fi
+          done
+          [ "$found" -eq 0 ] || fatal "full Foundation or ICU is linked"
+          echo "No full Foundation or ICU linked."
+
   linux-benchmark:
     name: Benchmarks (Linux)
     runs-on: ubuntu-latest
