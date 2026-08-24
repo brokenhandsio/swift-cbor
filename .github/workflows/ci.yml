@@ -122,7 +122,11 @@ jobs:
           # library names to match, and the loop below reports a clean pass.
           [ -f "$binary" ] || fatal "$binary does not exist, so nothing was checked"
 
-          linked="$(ldd "$binary" | awk '{print $1}' | grep -iE 'foundation|icu')"
+          # `|| true` is load-bearing. GitHub runs this with `-e -o pipefail`,
+          # and grep exits 1 when it matches nothing — which is exactly the
+          # passing case here. Without it the check fails precisely when the
+          # package is clean.
+          linked="$(ldd "$binary" | awk '{print $1}' | grep -iE 'foundation|icu' || true)"
           echo "Foundation-family libraries linked: ${linked:-(none)}"
 
           found=0
