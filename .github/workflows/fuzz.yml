@@ -44,6 +44,14 @@ jobs:
           # ordinary CBOR, so libFuzzer's default length limit is fine.
           - target: CBOROptions
             args: ""
+          # Asserts decodeFirst never reports consuming more than it was given —
+          # a property swift-webauthn's bounds arithmetic silently depends on.
+          - target: CBORDecodeFirst
+            args: ""
+          # The Codable bridge, which no other target reaches: they all enter
+          # through the parser.
+          - target: CBORCodable
+            args: ""
     steps:
       - uses: actions/checkout@v7
 
@@ -76,6 +84,14 @@ jobs:
           # Three control values off the back, the rest passed through as
           # ordinary CBOR, so libFuzzer's default length limit is fine.
           - target: CBOROptions
+            args: ""
+          # Asserts decodeFirst never reports consuming more than it was given —
+          # a property swift-webauthn's bounds arithmetic silently depends on.
+          - target: CBORDecodeFirst
+            args: ""
+          # The Codable bridge, which no other target reaches: they all enter
+          # through the parser.
+          - target: CBORCodable
             args: ""
     steps:
       - uses: actions/checkout@v7

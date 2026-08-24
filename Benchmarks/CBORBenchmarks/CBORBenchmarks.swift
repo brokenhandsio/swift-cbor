@@ -68,6 +68,20 @@ let benchmarks: @Sendable () -> Void = {
     ]
     Benchmark.defaultConfiguration.maxIterations = 100_000
 
+    // Allocation counts are deterministic for a given build, but the *p90* of
+    // them is not: the counts are small integers, so the 90th percentile lands
+    // on one side or the other of a discrete step depending on how the samples
+    // fall. Two CI runs of identical code were observed to differ by exactly 2
+    // on every benchmark. With no tolerance, that jitter fails the build in
+    // both directions — including when the numbers improve.
+    //
+    // 4 absorbs the observed movement while staying far below a real
+    // regression, which for these benchmarks means an allocation per element
+    // rather than a couple per run.
+    Benchmark.defaultConfiguration.thresholds = [
+        .mallocCountTotal: .init(absolute: [.p90: 4]),
+    ]
+
     Benchmark("Decode/COSE key") { benchmark in
         for _ in benchmark.scaledIterations {
             blackHole(try CBOR.decode(coseKeyBytes))
