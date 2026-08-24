@@ -187,7 +187,12 @@ private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtoc
     }
 
     private func append(_ node: EncodingNode, for key: Key) {
-        storage.append((.textString(key.stringValue), node))
+        append(node, forName: key.stringValue)
+    }
+
+    /// Appends under a literal name, for slots a `Key` cannot represent.
+    private func append(_ node: EncodingNode, forName name: String) {
+        storage.append((.textString(name), node))
     }
 
     func encodeNil(forKey key: Key) { append(.scalar(.null), for: key) }
@@ -225,7 +230,18 @@ private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtoc
     }
 
     func superEncoder() -> any Encoder {
-        superEncoder(forKey: Key(stringValue: "super")!)
+        // Deliberately not `superEncoder(forKey: Key(stringValue: "super")!)`.
+        //
+        // `Key` is the user's `CodingKeys` enum, and a synthesized one has no
+        // `super` case — so `init?(stringValue: "super")` returns nil and the
+        // force-unwrap traps. That made `superEncoder()` unusable for the exact
+        // thing it exists for: a subclass encoding its superclass's storage.
+        //
+        // The decoder never had this problem because it reads the `"super"`
+        // text key straight out of the map. This writes it the same way.
+        let encoder = _CBOREncoder(options: options, codingPath: codingPath)
+        append(.container(EncoderNode(encoder)), forName: "super")
+        return encoder
     }
 
     func superEncoder(forKey key: Key) -> any Encoder {
