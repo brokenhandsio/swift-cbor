@@ -67,6 +67,36 @@ let package = Package(
         ),
 
         .executableTarget(
+            name: "CBORCodable",
+            dependencies: ["CBORCodableTarget"],
+            path: "FuzzTargets/CBORCodableShim"
+        ),
+        .target(
+            name: "CBORCodableTarget",
+            dependencies: [
+                .product(name: "Fuzzing", package: "swift-fuzz"),
+                .product(name: "CBOR", package: "swift-cbor"),
+            ],
+            path: "FuzzTargets/CBORCodable",
+            plugins: [.plugin(name: "FuzzTargetPlugin", package: "swift-fuzz")]
+        ),
+
+        .executableTarget(
+            name: "CBORDecodeFirst",
+            dependencies: ["CBORDecodeFirstTarget"],
+            path: "FuzzTargets/CBORDecodeFirstShim"
+        ),
+        .target(
+            name: "CBORDecodeFirstTarget",
+            dependencies: [
+                .product(name: "Fuzzing", package: "swift-fuzz"),
+                .product(name: "CBOR", package: "swift-cbor"),
+            ],
+            path: "FuzzTargets/CBORDecodeFirst",
+            plugins: [.plugin(name: "FuzzTargetPlugin", package: "swift-fuzz")]
+        ),
+
+        .executableTarget(
             name: "CBOROptions",
             dependencies: ["CBOROptionsTarget"],
             path: "FuzzTargets/CBOROptionsShim"
