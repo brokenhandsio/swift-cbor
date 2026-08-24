@@ -96,6 +96,9 @@ jobs:
       - uses: actions/checkout@v7
 
       - name: Build a check executable and inspect its linkage
+        # The container's default shell is `sh` (dash), where `set -o pipefail`
+        # is not a valid option and the step dies on its first line.
+        shell: bash
         run: |
           set -uo pipefail
           fatal() { echo "::error::$*"; exit 1; }
