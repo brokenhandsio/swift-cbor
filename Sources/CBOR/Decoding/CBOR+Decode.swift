@@ -47,7 +47,8 @@ extension CBOR {
         _ bytes: [UInt8],
         options: CBOROptions = .default
     ) throws -> CBOR {
-        try decode(bytes.span, options: options)
+        // Go through the slice overload to avoid copying the array and allow it to work on older OS versions
+        try decode(bytes[...], options: options)
     }
 
     /// Decode exactly one CBOR data item from a slice of bytes.
@@ -64,7 +65,7 @@ extension CBOR {
         _ bytes: [UInt8],
         options: CBOROptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
-        try decodeFirst(bytes.span, options: options)
+        try decodeFirst(bytes[...], options: options)
     }
 
     /// Decode the first CBOR data item from a slice of bytes, reporting how many
