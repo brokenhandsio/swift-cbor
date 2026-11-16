@@ -27,8 +27,9 @@ Binary Object Representation, RFC 8949) library for Swift.
 ## Requirements
 
 - Swift 6.3+
-- macOS 26 / iOS 26 / tvOS 26 / watchOS 26 / visionOS 26 (or any Linux with a
-  Swift 6.3 toolchain)
+- macOS 13 / iOS 16 / tvOS 16 / watchOS 9 / visionOS 1 / Mac Catalyst 16 (or any
+  Linux with a Swift 6.3 toolchain). Apple Silicon only on macOS: `Float16` is not
+  available on Intel Macs.
 
 ## Installation
 
