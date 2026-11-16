@@ -302,10 +302,35 @@ enum CBORParser {
         _ offset: inout Int
     ) throws -> String {
         let raw = try readBytes(length, span, &offset)
-        guard let string = String(validating: raw, as: UTF8.self) else {
+        guard let string = validatedString(raw) else {
             throw CBORError.invalidUTF8
         }
         return string
+    }
+
+    /// Build a `String` from `bytes`, or return `nil` if they are not well-formed
+    /// UTF-8.
+    @inline(__always)
+    private static func validatedString(_ bytes: [UInt8]) -> String? {
+        if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
+            return String(validating: bytes, as: UTF8.self)
+        }
+        return validatedStringBackDeployed(bytes)
+    }
+
+    /// `validatedString(_:)` for OSes that predate `String(validating:as:)`.
+    ///
+    /// `String(decoding:as:)` never fails: it replaces each ill-formed sequence with
+    /// U+FFFD. That substitution always changes the bytes — the replacement is
+    /// itself well-formed, so it can never coincide with the ill-formed input it
+    /// stands in for — which means the input was valid exactly when decoding it
+    /// round-trips unchanged.
+    ///
+    /// Internal rather than private so tests can exercise it on OSes where the
+    /// `#available` check above never reaches it.
+    static func validatedStringBackDeployed(_ bytes: [UInt8]) -> String? {
+        let string = String(decoding: bytes, as: UTF8.self)
+        return string.utf8.elementsEqual(bytes) ? string : nil
     }
 
     // MARK: Indefinite-length strings
@@ -344,7 +369,7 @@ enum CBORParser {
             let length = try readArgument(initialByte & 0x1f, span, &offset)
             bytes.append(contentsOf: try readBytes(length, span, &offset))
         }
-        guard let string = String(validating: bytes, as: UTF8.self) else {
+        guard let string = validatedString(bytes) else {
             throw CBORError.invalidUTF8
         }
         return .textString(string)
