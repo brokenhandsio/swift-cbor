@@ -32,6 +32,14 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v7
+      # The first simulator call of a job starts simdiskimaged, which on some
+      # macos-26 VMs takes minutes to mount the simulator runtimes
+      # (actions/runner-images#15247). xcodebuild gives up after 60 s and
+      # reports that no device matches the destination. `simctl list` waits
+      # instead, so make it the first call.
+      - name: Wait for CoreSimulator
+        timeout-minutes: 10
+        run: time xcrun simctl list devices available
       - name: Test
         # SwiftPM generates a single scheme named after the package.
         run: |
@@ -55,6 +63,11 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
+      # Same slow CoreSimulator start as in `ios-test`. `-downloadPlatform`
+      # gives up after about 20 s with "Unable to connect to simulator".
+      - name: Wait for CoreSimulator
+        timeout-minutes: 10
+        run: time xcrun simctl list devices available
       - name: Download the iOS 18.0 simulator runtime
         run: xcodebuild -downloadPlatform iOS -buildVersion 18.0
       - name: Create an iOS 18.0 simulator
