@@ -2,7 +2,7 @@ import Testing
 import CBOR
 
 /// A small, deterministic PRNG (SplitMix64) so the fuzz inputs are reproducible.
-private struct SplitMix64: RandomNumberGenerator {
+struct SplitMix64: RandomNumberGenerator {
     private var state: UInt64
     init(seed: UInt64) { state = seed }
     mutating func next() -> UInt64 {

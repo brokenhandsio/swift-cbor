@@ -40,6 +40,40 @@ jobs:
             -scheme swift-cbor \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest'
 
+  # Every other Apple job runs on a 26.x OS, where `Span` ships in the OS. This
+  # one runs the suite on an OS that predates it, so the toolchain's back-deployed
+  # `Span` support is what actually executes. (The pre-iOS 18 fallback for
+  # `String(validating:as:)` is covered directly by BackDeployedUTF8Tests.)
+  #
+  # iOS 18.0 is the oldest simulator runtime Apple serves without a signed-in
+  # Apple ID; 16.x and 17.x need one. The runner image ships only 26.x runtimes,
+  # so it is downloaded here (~8 GB). An older macOS runner is not an option
+  # instead: the newest Xcode on macos-15 predates Swift 6.3.
+  ios-backdeploy-test:
+    name: Test (iOS 18 Simulator, pre-26 OS)
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - name: Download the iOS 18.0 simulator runtime
+        run: xcodebuild -downloadPlatform iOS -buildVersion 18.0
+      - name: Create an iOS 18.0 simulator
+        id: simulator
+        run: |
+          set -euo pipefail
+          runtime="$(xcrun simctl list runtimes -j \
+            | jq -r '.runtimes[] | select(.platform == "iOS" and .version == "18.0" and .isAvailable) | .identifier' \
+            | head -n 1)"
+          [ -n "$runtime" ] || { echo "::error::no iOS 18.0 simulator runtime is installed"; exit 1; }
+          udid="$(xcrun simctl create "iPhone 16 (iOS 18.0)" "iPhone 16" "$runtime")"
+          echo "udid=$udid" >> "$GITHUB_OUTPUT"
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -scheme swift-cbor \
+            -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'
+
   linux-test:
     name: Test (Linux)
     runs-on: ubuntu-latest

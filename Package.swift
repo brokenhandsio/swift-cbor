@@ -20,12 +20,12 @@ let extraSettings: [SwiftSetting] = [
 let package = Package(
     name: "swift-cbor",
     platforms: [
-        .macOS(.v26),
-        .iOS(.v26),
-        .tvOS(.v26),
-        .macCatalyst(.v26),
-        .visionOS(.v26),
-        .watchOS(.v26),
+        .macOS(.v13),
+        .iOS(.v16),
+        .tvOS(.v16),
+        .macCatalyst(.v16),
+        .visionOS(.v1),
+        .watchOS(.v9),
     ],
     products: [
         .library(
