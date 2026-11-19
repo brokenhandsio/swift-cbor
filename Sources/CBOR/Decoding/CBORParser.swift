@@ -74,10 +74,15 @@ enum CBORParser {
     }
 
     /// Parse a single data item starting at `offset`, advancing it past the item.
+    ///
+    /// `source`, when given, is the array slice that `span` views. Byte strings are
+    /// then copied out of it, which is a block copy; a bare `Span` can only be
+    /// copied from element by element.
     static func parseItem(
         _ span: Span<UInt8>,
         _ offset: inout Int,
-        options: CBORDecodingOptions
+        options: CBORDecodingOptions,
+        source: ArraySlice<UInt8>? = nil
     ) throws -> CBOR {
         // Clamped, not trusted: a value nested deeper than this decodes fine and
         // then overflows the stack when the runtime releases it. See
@@ -134,18 +139,18 @@ enum CBORParser {
 
             case 2:
                 if additional == 31 {
-                    scalar = try readIndefiniteByteString(span, &offset, item: start)
+                    scalar = try readIndefiniteByteString(span, &offset, item: start, source: source)
                 } else {
                     let length = try readArgument(additional, span, &offset, item: start)
-                    scalar = .byteString(try readBytes(length, span, &offset, item: start))
+                    scalar = .byteString(try readBytes(length, span, &offset, item: start, source: source))
                 }
 
             case 3:
                 if additional == 31 {
-                    scalar = try readIndefiniteTextString(span, &offset, item: start)
+                    scalar = try readIndefiniteTextString(span, &offset, item: start, source: source)
                 } else {
                     let length = try readArgument(additional, span, &offset, item: start)
-                    scalar = .textString(try readTextString(length, span, &offset, item: start))
+                    scalar = .textString(try readTextString(length, span, &offset, item: start, source: source))
                 }
 
             case 4:
@@ -299,36 +304,93 @@ enum CBORParser {
         return result
     }
 
+    /// The next `length` bytes, as a span, advancing `offset` past them.
+    @inline(__always)
+    private static func readSpan(
+        _ length: UInt64,
+        _ span: Span<UInt8>,
+        _ offset: inout Int,
+        item start: Int
+    ) throws -> Span<UInt8> {
+        guard let count = Int(exactly: length),
+              count <= span.count - offset else {
+            throw CBORError.unexpectedEnd(offset: start)
+        }
+        let end = offset + count
+        let bytes = span.extracting(offset..<end)
+        offset = end
+        return bytes
+    }
+
     /// Read `length` raw bytes, copying them into an array.
     private static func readBytes(
         _ length: UInt64,
         _ span: Span<UInt8>,
         _ offset: inout Int,
-        item start: Int
+        item start: Int,
+        source: ArraySlice<UInt8>?
     ) throws -> [UInt8] {
-        guard let count = Int(exactly: length),
-              count <= span.count - offset else {
-            throw CBORError.unexpectedEnd(offset: start)
+        let begin = offset
+        let bytes = try readSpan(length, span, &offset, item: start)
+        if let source {
+            return Array(source[slice: begin..<offset])
         }
-        var bytes: [UInt8] = []
-        bytes.reserveCapacity(count)
-        let end = offset + count
-        var index = offset
-        while index < end {
-            bytes.append(span[index])
-            index += 1
+        return Array(capacity: bytes.count) { output in
+            append(bytes, to: &output)
         }
-        offset = end
-        return bytes
+    }
+
+    /// Append `length` raw bytes to `bytes`, for a chunk of an indefinite-length
+    /// string.
+    private static func appendBytes(
+        _ length: UInt64,
+        _ span: Span<UInt8>,
+        _ offset: inout Int,
+        item start: Int,
+        source: ArraySlice<UInt8>?,
+        to bytes: inout [UInt8]
+    ) throws {
+        let begin = offset
+        let chunk = try readSpan(length, span, &offset, item: start)
+        if let source {
+            bytes.append(contentsOf: source[slice: begin..<offset])
+            return
+        }
+        bytes.append(addingCapacity: chunk.count) { output in
+            append(chunk, to: &output)
+        }
+    }
+
+    /// Copy `source` into `output`.
+    ///
+    /// An element-by-element loop, but one the optimizer turns into a block copy:
+    /// it is about nine times faster than appending to an `Array` one byte at a
+    /// time, and needs no unsafe pointers. (`Array(capacity:initializingWith:)` is
+    /// back-deployed, so this runs on every supported OS.)
+    @inline(__always)
+    private static func append(_ source: Span<UInt8>, to output: inout OutputSpan<UInt8>) {
+        for index in source.indices {
+            output.append(source[index])
+        }
     }
 
     private static func readTextString(
         _ length: UInt64,
         _ span: Span<UInt8>,
         _ offset: inout Int,
-        item start: Int
+        item start: Int,
+        source: ArraySlice<UInt8>?
     ) throws -> String {
-        let raw = try readBytes(length, span, &offset, item: start)
+        // Validate in place and copy once, rather than copying into an array
+        // first and validating that.
+        if #available(macOS 26.0, iOS 26.0, watchOS 26.0, tvOS 26.0, visionOS 26.0, *) {
+            let bytes = try readSpan(length, span, &offset, item: start)
+            guard let utf8 = try? UTF8Span(validating: bytes) else {
+                throw CBORError.invalidUTF8(offset: start)
+            }
+            return String(copying: utf8)
+        }
+        let raw = try readBytes(length, span, &offset, item: start, source: source)
         guard let string = validatedString(raw) else {
             throw CBORError.invalidUTF8(offset: start)
         }
@@ -368,7 +430,8 @@ enum CBORParser {
     private static func readIndefiniteByteString(
         _ span: Span<UInt8>,
         _ offset: inout Int,
-        item start: Int
+        item start: Int,
+        source: ArraySlice<UInt8>?
     ) throws -> CBOR {
         var bytes: [UInt8] = []
         while true {
@@ -379,7 +442,7 @@ enum CBORParser {
                 throw CBORError.invalidIndefiniteLength(offset: chunk)
             }
             let length = try readArgument(initialByte & 0x1f, span, &offset, item: chunk)
-            bytes.append(contentsOf: try readBytes(length, span, &offset, item: chunk))
+            try appendBytes(length, span, &offset, item: chunk, source: source, to: &bytes)
         }
         return .byteString(bytes)
     }
@@ -387,7 +450,8 @@ enum CBORParser {
     private static func readIndefiniteTextString(
         _ span: Span<UInt8>,
         _ offset: inout Int,
-        item start: Int
+        item start: Int,
+        source: ArraySlice<UInt8>?
     ) throws -> CBOR {
         var bytes: [UInt8] = []
         while true {
@@ -398,7 +462,7 @@ enum CBORParser {
                 throw CBORError.invalidIndefiniteLength(offset: chunk)
             }
             let length = try readArgument(initialByte & 0x1f, span, &offset, item: chunk)
-            bytes.append(contentsOf: try readBytes(length, span, &offset, item: chunk))
+            try appendBytes(length, span, &offset, item: chunk, source: source, to: &bytes)
         }
         guard let string = validatedString(bytes) else {
             throw CBORError.invalidUTF8(offset: start)
@@ -442,5 +506,14 @@ enum CBORParser {
         default: // 28, 29, 30
             throw CBORError.reservedAdditionalInfo(additional, offset: start)
         }
+    }
+}
+
+extension ArraySlice {
+    /// The elements at `offsets`, counted from `startIndex` as positions in its
+    /// `span` are.
+    @inline(__always)
+    fileprivate subscript(slice offsets: Range<Int>) -> ArraySlice<Element> {
+        self[(startIndex + offsets.lowerBound)..<(startIndex + offsets.upperBound)]
     }
 }

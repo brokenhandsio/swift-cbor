@@ -12,8 +12,18 @@ extension CBOR {
         _ bytes: Span<UInt8>,
         options: CBORDecodingOptions = .default
     ) throws -> CBOR {
+        try decode(bytes, options: options, source: nil)
+    }
+
+    /// `decode(_:options:)`, with the array slice `bytes` views, if there is one,
+    /// for copying byte strings out of.
+    static func decode(
+        _ bytes: Span<UInt8>,
+        options: CBORDecodingOptions,
+        source: ArraySlice<UInt8>?
+    ) throws -> CBOR {
         var offset = 0
-        let value = try CBORParser.parseItem(bytes, &offset, options: options)
+        let value = try CBORParser.parseItem(bytes, &offset, options: options, source: source)
         guard offset == bytes.count else {
             throw CBORError.trailingData(remaining: bytes.count - offset, offset: offset)
         }
@@ -33,8 +43,18 @@ extension CBOR {
         _ bytes: Span<UInt8>,
         options: CBORDecodingOptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
+        try decodeFirst(bytes, options: options, source: nil)
+    }
+
+    /// `decodeFirst(_:options:)`, with the array slice `bytes` views, if there is
+    /// one, for copying byte strings out of.
+    static func decodeFirst(
+        _ bytes: Span<UInt8>,
+        options: CBORDecodingOptions,
+        source: ArraySlice<UInt8>?
+    ) throws -> (value: CBOR, bytesConsumed: Int) {
         var offset = 0
-        let value = try CBORParser.parseItem(bytes, &offset, options: options)
+        let value = try CBORParser.parseItem(bytes, &offset, options: options, source: source)
         return (value, offset)
     }
 }
@@ -56,7 +76,7 @@ extension CBOR {
         _ bytes: ArraySlice<UInt8>,
         options: CBORDecodingOptions = .default
     ) throws -> CBOR {
-        try decode(bytes.span, options: options)
+        try decode(bytes.span, options: options, source: bytes)
     }
 
     /// Decode the first CBOR data item from an array of bytes, reporting how many
@@ -74,6 +94,6 @@ extension CBOR {
         _ bytes: ArraySlice<UInt8>,
         options: CBORDecodingOptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
-        try decodeFirst(bytes.span, options: options)
+        try decodeFirst(bytes.span, options: options, source: bytes)
     }
 }

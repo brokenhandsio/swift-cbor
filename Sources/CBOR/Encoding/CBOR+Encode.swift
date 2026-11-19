@@ -62,9 +62,11 @@ extension CBOR {
             appendTypedArgument(major: 2, UInt64(bytes.count), to: &out)
             out.append(contentsOf: bytes)
         case .textString(let string):
-            let utf8 = Array(string.utf8)
-            appendTypedArgument(major: 3, UInt64(utf8.count), to: &out)
-            out.append(contentsOf: utf8)
+            // Straight from the string's storage: `utf8.count` is O(1) for a
+            // native string, and appending the view copies its contiguous bytes
+            // in one go, with no intermediate array.
+            appendTypedArgument(major: 3, UInt64(string.utf8.count), to: &out)
+            out.append(contentsOf: string.utf8)
         case .simple(let value):
             // Major 7 with the value as its argument: 0...19 fit in the head byte and
             // 32...255 take the 0xf8 prefix. `CBORSimpleValue` rules out 20...31, the
@@ -111,12 +113,48 @@ private func emit(_ cbor: CBOR, to out: inout [UInt8], stack: inout [EncodeTask]
     case .map(let entries):
         appendTypedArgument(major: 5, UInt64(entries.count), to: &out)
         emitMapValue(entries, to: &out, stack: &stack)
-    case .tagged(let tag, let item):
-        appendTypedArgument(major: 6, tag.rawValue, to: &out)
-        stack.append(.value(item))
+    case .tagged:
+        // Write the tag heads in a loop, so nested tags need no stack, then the
+        // item. A container item is emitted here directly, which recurses at most
+        // once: it is not a tag.
+        var inner = cbor
+        while case .tagged(let tag, let item) = inner {
+            appendTypedArgument(major: 6, tag.rawValue, to: &out)
+            inner = item
+        }
+        if inner.isScalar {
+            inner.appendScalarBytes(to: &out)
+        } else {
+            emit(inner, to: &out, stack: &stack)
+        }
     default:
         cbor.appendScalarBytes(to: &out)
     }
+}
+
+/// Write `value` and return `true` if it contains no container: a scalar, or tags
+/// around one. Write nothing and return `false` otherwise, so the caller can defer
+/// it to the work stack.
+///
+/// Tags around a scalar are common (a date, a bignum, an embedded item), and
+/// writing them inline keeps them from allocating the work stack.
+@inline(__always)
+private func appendIfLeaf(_ value: CBOR, to out: inout [UInt8]) -> Bool {
+    if value.isScalar {
+        value.appendScalarBytes(to: &out)
+        return true
+    }
+    guard case .tagged = value else { return false }
+    var inner = value
+    while case .tagged(_, let item) = inner { inner = item }
+    guard inner.isScalar else { return false }
+    var current = value
+    while case .tagged(let tag, let item) = current {
+        appendTypedArgument(major: 6, tag.rawValue, to: &out)
+        current = item
+    }
+    current.appendScalarBytes(to: &out)
+    return true
 }
 
 /// Write array elements inline until a nested container is reached, at which point
@@ -128,8 +166,7 @@ private func emitArray(
     var index = start
     while index < elements.count {
         let element = elements[index]
-        if element.isScalar {
-            element.appendScalarBytes(to: &out)
+        if appendIfLeaf(element, to: &out) {
             index += 1
         } else {
             stack.append(.arrayElements(elements, index + 1))
@@ -150,9 +187,7 @@ private func emitMapValue(
     ranges.reserveCapacity(entries.count)
     for (key, value) in entries {
         let start = keyBytes.count
-        if key.isScalar {
-            key.appendScalarBytes(to: &keyBytes)
-        } else {
+        if !appendIfLeaf(key, to: &keyBytes) {
             key.appendEncoding(to: &keyBytes)
         }
         ranges.append((start, keyBytes.count, value))
@@ -172,8 +207,7 @@ private func emitMap(
     while index < ranges.count {
         let range = ranges[index]
         out.append(contentsOf: keyBytes[range.start..<range.end])
-        if range.value.isScalar {
-            range.value.appendScalarBytes(to: &out)
+        if appendIfLeaf(range.value, to: &out) {
             index += 1
         } else {
             stack.append(.mapEntries(keyBytes, ranges, index + 1))
