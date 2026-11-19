@@ -140,7 +140,12 @@ struct CBORFuzzGenerator {
         var value = Double(bitPattern: rng.next())
         if value.isNaN { value = Double(nextUInt(1000)) }
         switch nextUInt(3) {
-        case 0: out.append(0xf9); appendBigEndian(UInt64(Float16(value).bitPattern), width: 2, into: &out)
+        case 0:
+            // Any 16 bits are a half. Built directly rather than via `Float16`, which
+            // Intel Macs lack; a NaN pattern becomes an infinity, per the rule above.
+            var half = UInt16(truncatingIfNeeded: rng.next())
+            if half & 0x7c00 == 0x7c00 { half &= 0xfc00 }
+            out.append(0xf9); appendBigEndian(UInt64(half), width: 2, into: &out)
         case 1: out.append(0xfa); appendBigEndian(UInt64(Float(value).bitPattern), width: 4, into: &out)
         default: out.append(0xfb); appendBigEndian(value.bitPattern, width: 8, into: &out)
         }

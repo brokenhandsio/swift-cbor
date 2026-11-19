@@ -25,7 +25,7 @@ struct FloatKeyIdentityTests {
         // indistinguishable once encoded.
         #expect(CBOR.double(.nan) == CBOR.double(.nan))
         #expect(CBOR.float(.nan) == CBOR.float(.nan))
-        #expect(CBOR.half(.nan) == CBOR.half(.nan))
+        #expect(CBOR.half(bitPattern: 0x7e00) == CBOR.half(bitPattern: 0x7e00))
     }
 
     @Test("A NaN key does not multiply inside a map")
@@ -98,7 +98,7 @@ struct FloatKeyIdentityTests {
 
         #expect(CBOR.double(.nan).hashValue == CBOR.double(.nan).hashValue)
         #expect(CBOR.float(.nan).hashValue == CBOR.float(.nan).hashValue)
-        #expect(CBOR.half(.nan).hashValue == CBOR.half(.nan).hashValue)
+        #expect(CBOR.half(bitPattern: 0x7e00).hashValue == CBOR.half(bitPattern: 0x7e00).hashValue)
     }
 
     @Test("Equal floats of the same width remain equal")

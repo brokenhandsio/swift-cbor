@@ -399,7 +399,7 @@ enum CBORParser {
             guard value >= 32 else { throw CBORError.reservedAdditionalInfo(24) }
             return .simple(value)
         case 25:
-            return .half(Float16(bitPattern: try readUInt16(span, &offset)))
+            return .half(bitPattern: try readUInt16(span, &offset))
         case 26:
             return .float(Float(bitPattern: try readUInt32(span, &offset)))
         case 27:

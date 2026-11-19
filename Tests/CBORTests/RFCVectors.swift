@@ -31,21 +31,21 @@ enum RFCVectors {
     // MARK: Floating-point (excluding NaN — see FloatTests)
 
     static let floats: [RFCVector] = [
-        RFCVector("f90000", .half(0.0)),
-        RFCVector("f98000", .half(-0.0)),
-        RFCVector("f93c00", .half(1.0)),
+        RFCVector("f90000", .half(bitPattern: 0x0000)),   // 0.0
+        RFCVector("f98000", .half(bitPattern: 0x8000)),   // -0.0
+        RFCVector("f93c00", .half(bitPattern: 0x3c00)),   // 1.0
         RFCVector("fb3ff199999999999a", .double(1.1)),
-        RFCVector("f93e00", .half(1.5)),
-        RFCVector("f97bff", .half(65504.0)),
+        RFCVector("f93e00", .half(bitPattern: 0x3e00)),   // 1.5
+        RFCVector("f97bff", .half(bitPattern: 0x7bff)),   // 65504.0
         RFCVector("fa47c35000", .float(100000.0)),
         RFCVector("fa7f7fffff", .float(3.4028234663852886e+38)),
         RFCVector("fb7e37e43c8800759c", .double(1.0e+300)),
-        RFCVector("f90001", .half(5.960464477539063e-8)),
-        RFCVector("f90400", .half(0.00006103515625)),
-        RFCVector("f9c400", .half(-4.0)),
+        RFCVector("f90001", .half(bitPattern: 0x0001)),   // 5.960464477539063e-8
+        RFCVector("f90400", .half(bitPattern: 0x0400)),   // 0.00006103515625
+        RFCVector("f9c400", .half(bitPattern: 0xc400)),   // -4.0
         RFCVector("fbc010666666666666", .double(-4.1)),
-        RFCVector("f97c00", .half(.infinity)),
-        RFCVector("f9fc00", .half(-.infinity)),
+        RFCVector("f97c00", .half(bitPattern: 0x7c00)),   // infinity
+        RFCVector("f9fc00", .half(bitPattern: 0xfc00)),   // -infinity
         RFCVector("fa7f800000", .float(.infinity)),
         RFCVector("faff800000", .float(-.infinity)),
         RFCVector("fb7ff0000000000000", .double(.infinity)),

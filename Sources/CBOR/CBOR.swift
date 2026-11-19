@@ -72,8 +72,14 @@ public enum CBOR: Sendable, Hashable {
     /// The `undefined` value (major type 7, simple value 23).
     case undefined
 
-    /// An IEEE 754 half-precision float (major type 7, additional info 25).
-    case half(Float16)
+    /// An IEEE 754 half-precision float (major type 7, additional info 25), held as
+    /// its 16-bit pattern.
+    ///
+    /// The bits are stored rather than a `Float16` because `Float16` is unavailable
+    /// on Intel Macs. They also round-trip exactly, NaN payloads included. Use
+    /// ``doubleValue`` for the numeric value on any platform, or
+    /// `Float16(bitPattern:)` where `Float16` exists.
+    case half(bitPattern: UInt16)
 
     /// An IEEE 754 single-precision float (major type 7, additional info 26).
     case float(Float)

@@ -60,7 +60,7 @@ struct RoundTripTests {
         .simple(19),
         .simple(32),
         .simple(255),
-        .half(3.5),
+        .half(bitPattern: 0x4300), // 3.5
         .float(2.5),
         .double(2.5),
         .tagged(.epochDateTime, .unsignedInt(1000)),

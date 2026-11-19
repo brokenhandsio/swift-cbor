@@ -93,8 +93,8 @@ extension CBOR {
     @inlinable
     public var doubleValue: Double? {
         switch self {
-        case .half(let value):
-            return Double(value)
+        case .half(let bits):
+            return HalfPrecision.double(fromBits: bits)
         case .float(let value):
             return Double(value)
         case .double(let value):

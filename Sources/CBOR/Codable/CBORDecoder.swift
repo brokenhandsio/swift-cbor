@@ -121,7 +121,7 @@ private func unboxString(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> 
 @inline(__always)
 private func unboxDouble(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> Double {
     switch cbor {
-    case .half(let value): return Double(value)
+    case .half(let bits): return HalfPrecision.double(fromBits: bits)
     case .float(let value): return Double(value)
     case .double(let value): return value
     default: throw typeMismatch(Double.self, cbor, codingPath)
@@ -131,7 +131,7 @@ private func unboxDouble(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> 
 @inline(__always)
 private func unboxFloat(_ cbor: CBOR, _ codingPath: [any CodingKey]) throws -> Float {
     switch cbor {
-    case .half(let value): return Float(value)
+    case .half(let bits): return HalfPrecision.float(fromBits: bits)
     case .float(let value): return value
     case .double(let value): return Float(value)
     default: throw typeMismatch(Float.self, cbor, codingPath)

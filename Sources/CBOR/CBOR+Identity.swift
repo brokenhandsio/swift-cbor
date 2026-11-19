@@ -38,7 +38,7 @@ extension CBOR {
         case (.null, .null): return true
         case (.undefined, .undefined): return true
         // Bit patterns rather than IEEE equality: see the note above.
-        case (.half(let a), .half(let b)): return a.bitPattern == b.bitPattern
+        case (.half(let a), .half(let b)): return a == b // already a bit pattern
         case (.float(let a), .float(let b)): return a.bitPattern == b.bitPattern
         case (.double(let a), .double(let b)): return a.bitPattern == b.bitPattern
         case (.array, .array), (.map, .map), (.tagged, .tagged):
@@ -135,9 +135,9 @@ extension CBOR {
         // Bit patterns, to stay consistent with `==`. The standard library
         // would do the same except for normalising -0.0 to +0.0, which `==` now
         // treats as a different value.
-        case .half(let value):
+        case .half(let bits):
             hasher.combine(11 as UInt8)
-            hasher.combine(value.bitPattern)
+            hasher.combine(bits)
         case .float(let value):
             hasher.combine(12 as UInt8)
             hasher.combine(value.bitPattern)

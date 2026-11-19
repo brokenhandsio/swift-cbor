@@ -70,9 +70,9 @@ extension CBOR {
             out.append(0xf6)
         case .undefined:
             out.append(0xf7)
-        case .half(let value):
+        case .half(let bits):
             out.append(0xf9)
-            appendBigEndian(value.bitPattern, to: &out)
+            appendBigEndian(bits, to: &out)
         case .float(let value):
             out.append(0xfa)
             appendBigEndian(value.bitPattern, to: &out)

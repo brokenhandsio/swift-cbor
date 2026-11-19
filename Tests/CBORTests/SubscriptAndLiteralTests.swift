@@ -55,7 +55,7 @@ struct SubscriptAndLiteralTests {
         #expect(CBOR.textString("x").string == "x")
         #expect(CBOR.bool(true).boolValue == true)
         #expect(CBOR.double(1.5).doubleValue == 1.5)
-        #expect(CBOR.half(1.5).doubleValue == 1.5)
+        #expect(CBOR.half(bitPattern: 0x3e00).doubleValue == 1.5)
         #expect(CBOR.null.isNull)
         #expect(CBOR.textString("x").int == nil)
     }
