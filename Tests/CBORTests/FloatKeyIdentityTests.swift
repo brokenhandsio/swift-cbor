@@ -17,6 +17,9 @@ private let twoNaNKeys: [UInt8] = [
     0xff,                                                  // break
 ]
 
+/// The collapse tests need the map to decode, so they allow the repeated key.
+private let allowDuplicates = CBORDecodingOptions(rejectDuplicateMapKeys: false)
+
 @Suite("Float key identity")
 struct FloatKeyIdentityTests {
     @Test("NaN values of the same bit pattern are the same CBOR value")
@@ -25,7 +28,7 @@ struct FloatKeyIdentityTests {
         // indistinguishable once encoded.
         #expect(CBOR.double(.nan) == CBOR.double(.nan))
         #expect(CBOR.float(.nan) == CBOR.float(.nan))
-        #expect(CBOR.half(.nan) == CBOR.half(.nan))
+        #expect(CBOR.half(bitPattern: 0x7e00) == CBOR.half(bitPattern: 0x7e00))
     }
 
     @Test("A NaN key does not multiply inside a map")
@@ -37,9 +40,17 @@ struct FloatKeyIdentityTests {
         #expect(map[.double(.nan)] == 2)
     }
 
+    @Test("A repeated NaN key is a duplicate key")
+    func repeatedNaNKeyIsDuplicate() {
+        // Same bit pattern, same key: rejected by default like any other repeat.
+        #expect(throws: CBORError.duplicateMapKey(offset: 11)) {
+            try CBOR.decode(twoNaNKeys)
+        }
+    }
+
     @Test("Decoding a map with a repeated NaN key yields one entry")
     func decodeCollapsesRepeatedNaNKey() throws {
-        let value = try CBOR.decode(twoNaNKeys)
+        let value = try CBOR.decode(twoNaNKeys, options: allowDuplicates)
         guard case .map(let entries) = value else {
             Issue.record("expected a map, got \(value)")
             return
@@ -47,16 +58,16 @@ struct FloatKeyIdentityTests {
         #expect(entries.count == 1)
     }
 
-    @Test("Encoding is a fixed point for maps with NaN keys", .serialized)
+    @Test("Encoding is a fixed point for maps with NaN keys")
     func encodingIsStable() throws {
         // Repeated because the instability came from `Dictionary` iteration
         // order, which Swift seeds per process — a single pass would have
         // caught the original bug only about 40% of the time. This runs in one
         // process, so it relies on the collapse above rather than on luck, but
         // the repetition guards against a partial fix.
-        let first = try CBOR.decode(twoNaNKeys).encode()
+        let first = try CBOR.decode(twoNaNKeys, options: allowDuplicates).encode()
         for _ in 0..<100 {
-            let again = try CBOR.decode(twoNaNKeys).encode()
+            let again = try CBOR.decode(twoNaNKeys, options: allowDuplicates).encode()
             #expect(again == first)
         }
     }
@@ -98,7 +109,7 @@ struct FloatKeyIdentityTests {
 
         #expect(CBOR.double(.nan).hashValue == CBOR.double(.nan).hashValue)
         #expect(CBOR.float(.nan).hashValue == CBOR.float(.nan).hashValue)
-        #expect(CBOR.half(.nan).hashValue == CBOR.half(.nan).hashValue)
+        #expect(CBOR.half(bitPattern: 0x7e00).hashValue == CBOR.half(bitPattern: 0x7e00).hashValue)
     }
 
     @Test("Equal floats of the same width remain equal")

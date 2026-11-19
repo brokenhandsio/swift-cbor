@@ -37,9 +37,9 @@ let package = Package(
         .trait(
             name: "FoundationSupport",
             description: """
-                Enables Foundation-backed conveniences in the Codable bridge — most \
-                notably encoding/decoding `Data` as a CBOR byte string. Enabled by \
-                default; disable it to build the library without linking Foundation.
+                Enables Foundation-backed conveniences in the Codable bridge: `Data` \
+                encodes as a CBOR byte string and `Date` as tag 1 epoch time. Enabled \
+                by default; disable it to build the library without linking Foundation.
                 """
         ),
         .default(enabledTraits: ["FoundationSupport"]),

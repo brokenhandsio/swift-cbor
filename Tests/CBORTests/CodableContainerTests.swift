@@ -115,16 +115,14 @@ struct CodableContainerTests {
         #expect(decoded == Everything.sample)
     }
 
-    @Test("round trip is a fixed point under deterministic encoding")
-    func deterministicFixedPoint() throws {
-        // Only under `deterministic`: with it off, map keys are emitted in
-        // `Dictionary` order, which differs between two separately decoded
-        // values, so a map with more than one entry can legitimately encode two
-        // ways. `lookup` has two.
-        let options = CBOROptions(deterministic: true)
-        let encoder = CBOREncoder(options: options)
+    @Test("round trip is a fixed point")
+    func roundTripFixedPoint() throws {
+        // Holds because map keys are always sorted. `lookup` is a two-entry
+        // dictionary, whose iteration order differs between two separately
+        // decoded values, so this would fail if keys were written in that order.
+        let encoder = CBOREncoder()
         let once = try encoder.encode(Everything.sample)
-        let decoded = try CBORDecoder(options: options).decode(Everything.self, from: once)
+        let decoded = try CBORDecoder().decode(Everything.self, from: once)
         #expect(try encoder.encode(decoded) == once)
     }
 

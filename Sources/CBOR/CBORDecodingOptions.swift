@@ -1,9 +1,13 @@
-/// Options controlling CBOR decoding and encoding.
-public struct CBOROptions: Sendable {
+/// Options controlling how CBOR is decoded, by ``CBOR/decode(_:options:)-(Span<UInt8>,_)``,
+/// ``CBOR/decodeFirst(_:options:)-(Span<UInt8>,_)`` and ``CBORDecoder``.
+///
+/// Encoding takes no options: its output is always deterministic. See
+/// ``CBOR/encode()``.
+public struct CBORDecodingOptions: Sendable {
     /// The maximum nesting depth to decode, inclusive.
     ///
     /// A top-level primitive has depth 0; each nested array, map or tag increases
-    /// the depth by one. Decoding throws ``CBORError/maxDepthExceeded(_:)`` when the
+    /// the depth by one. Decoding throws ``CBORError/maxDepthExceeded(limit:offset:)`` when the
     /// limit would be exceeded. This bounds stack usage on adversarial input.
     /// Defaults to `512`.
     ///
@@ -11,27 +15,31 @@ public struct CBOROptions: Sendable {
     /// stops at that ceiling regardless. See its documentation for why.
     public var maximumDepth: Int
 
-    /// When decoding, throw ``CBORError/duplicateMapKey`` if a map contains the same
-    /// key more than once. Defaults to `false`.
+    /// Throw ``CBORError/duplicateMapKey(offset:)`` if a map contains the same
+    /// key more than once. Defaults to `true`.
+    ///
+    /// RFC 8949 §5.6 says a map with a duplicate key is not valid CBOR, and
+    /// decoders disagree about which value such a map means. Rejecting it means
+    /// bytes that another decoder reads differently never decode silently. Keys
+    /// are compared as decoded values, so `1` written in one byte and `1` written in
+    /// two are the same key. Floats compare by bit pattern, so `0.0` and `-0.0` are
+    /// different keys, as are `1` and `1.0`.
+    ///
+    /// Set this to `false` to accept such maps; the last value for a key then wins.
     public var rejectDuplicateMapKeys: Bool
 
-    /// When encoding, produce RFC 8949 §4.2 "core deterministic" output: integers
-    /// and floats use their shortest form and map keys are sorted into bytewise
-    /// lexicographic order of their encodings. Defaults to `true`.
+    /// Create decoding options.
     ///
-    /// Because ``CBOR/map(_:)`` is backed by an unordered dictionary, deterministic
-    /// ordering is the only stable ordering available; disabling this only relaxes
-    /// the shortest-form guarantees, not key ordering.
-    public var deterministic: Bool
-
+    /// - Parameters:
+    ///   - maximumDepth: The deepest nesting to decode. See ``maximumDepth``.
+    ///   - rejectDuplicateMapKeys: Whether a map that repeats a key is an error.
+    ///     See ``rejectDuplicateMapKeys``.
     public init(
         maximumDepth: Int = 512,
-        rejectDuplicateMapKeys: Bool = false,
-        deterministic: Bool = true
+        rejectDuplicateMapKeys: Bool = true
     ) {
         self.maximumDepth = maximumDepth
         self.rejectDuplicateMapKeys = rejectDuplicateMapKeys
-        self.deterministic = deterministic
     }
 
     /// The deepest nesting this library will decode, whatever ``maximumDepth`` says.
@@ -50,10 +58,10 @@ public struct CBOROptions: Sendable {
     /// which it is on, it refuses to build values it may be unable to destroy.
     ///
     /// 1024 leaves the default of 512 usable while staying inside the smaller
-    /// budget. Deeper input fails with ``CBORError/maxDepthExceeded(_:)``, which
+    /// budget. Deeper input fails with ``CBORError/maxDepthExceeded(limit:offset:)``, which
     /// is a normal error rather than a crash.
     public static let maximumSupportedDepth = 1024
 
     /// The default options.
-    public static let `default` = CBOROptions()
+    public static let `default` = CBORDecodingOptions()
 }

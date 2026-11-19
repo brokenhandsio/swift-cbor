@@ -87,10 +87,16 @@ jobs:
             -scheme swift-cbor \
             -destination 'platform=iOS Simulator,id=${{ steps.simulator.outputs.udid }}'
 
+  # The Linux test jobs run on every supported Swift release: 6.3, the floor set
+  # by `swift-tools-version`, and the latest. The other Linux jobs stay on 6.3.
   linux-test:
-    name: Test (Linux)
+    name: Test (Linux, Swift ${{ matrix.swift }})
     runs-on: ubuntu-latest
-    container: swift:6.3
+    container: swift:${{ matrix.swift }}
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.3", "6.4"]
     steps:
       - uses: actions/checkout@v7
       - name: Build
@@ -99,9 +105,13 @@ jobs:
         run: swift test
 
   linux-test-no-foundation:
-    name: Test (Linux, FoundationSupport disabled)
+    name: Test (Linux, Swift ${{ matrix.swift }}, FoundationSupport disabled)
     runs-on: ubuntu-latest
-    container: swift:6.3
+    container: swift:${{ matrix.swift }}
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.3", "6.4"]
     steps:
       - uses: actions/checkout@v7
       # Guards against re-introducing a hard Foundation dependency in the core

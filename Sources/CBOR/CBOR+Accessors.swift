@@ -34,7 +34,7 @@ extension CBOR {
     /// Handles both `.unsignedInt` and `.negativeInt` (applying the `-1 - n`
     /// convention). Returns `nil` for non-integers or values outside `Int`'s range.
     @inlinable
-    public var int: Int? {
+    public var intValue: Int? {
         switch self {
         case .unsignedInt(let value):
             return Int(exactly: value)
@@ -48,21 +48,21 @@ extension CBOR {
 
     /// The value as a `UInt64` if this is an `.unsignedInt`.
     @inlinable
-    public var uint64: UInt64? {
+    public var uint64Value: UInt64? {
         guard case .unsignedInt(let value) = self else { return nil }
         return value
     }
 
     /// The bytes if this is a `.byteString`.
     @inlinable
-    public var bytes: [UInt8]? {
+    public var bytesValue: [UInt8]? {
         guard case .byteString(let bytes) = self else { return nil }
         return bytes
     }
 
     /// The string if this is a `.textString`.
     @inlinable
-    public var string: String? {
+    public var stringValue: String? {
         guard case .textString(let string) = self else { return nil }
         return string
     }
@@ -93,8 +93,8 @@ extension CBOR {
     @inlinable
     public var doubleValue: Double? {
         switch self {
-        case .half(let value):
-            return Double(value)
+        case .half(let bits):
+            return HalfPrecision.double(fromBits: bits)
         case .float(let value):
             return Double(value)
         case .double(let value):

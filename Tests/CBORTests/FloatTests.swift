@@ -6,11 +6,12 @@ struct FloatTests {
     @Test("half NaN decodes to a NaN half")
     func decodeHalfNaN() throws {
         let decoded = try CBOR.decode(bytes(fromHex: "f97e00"))
-        guard case .half(let value) = decoded else {
+        guard case .half(let bits) = decoded else {
             Issue.record("expected .half, got \(decoded)")
             return
         }
-        #expect(value.isNaN)
+        #expect(bits == 0x7e00)
+        #expect(decoded.doubleValue?.isNaN == true)
     }
 
     @Test("float NaN decodes to a NaN float")
@@ -35,23 +36,24 @@ struct FloatTests {
 
     @Test("canonical NaN encodings")
     func encodeNaN() {
-        #expect(hexString(CBOR.half(.nan).encode()) == "f97e00")
+        #expect(hexString(CBOR.half(bitPattern: 0x7e00).encode()) == "f97e00")
         #expect(hexString(CBOR.float(.nan).encode()) == "fa7fc00000")
         #expect(hexString(CBOR.double(.nan).encode()) == "fb7ff8000000000000")
     }
 
     @Test("negative zero is preserved by bit pattern")
     func negativeZero() throws {
-        #expect(hexString(CBOR.half(-0.0).encode()) == "f98000")
-        #expect(hexString(CBOR.half(0.0).encode()) == "f90000")
+        #expect(hexString(CBOR.half(bitPattern: 0x8000).encode()) == "f98000") // -0.0
+        #expect(hexString(CBOR.half(bitPattern: 0x0000).encode()) == "f90000") // +0.0
 
         let decoded = try CBOR.decode(bytes(fromHex: "f98000"))
-        guard case .half(let value) = decoded else {
+        guard case .half(let bits) = decoded else {
             Issue.record("expected .half")
             return
         }
-        #expect(value.sign == .minus)
-        #expect(value == 0.0)
+        #expect(bits == 0x8000)
+        #expect(decoded.doubleValue?.sign == .minus)
+        #expect(decoded.doubleValue == 0.0)
     }
 
     @Test("float widths are preserved (no cross-width shortening)")
@@ -59,7 +61,7 @@ struct FloatTests {
         // A value representable in a narrower type still encodes at its declared width.
         #expect(hexString(CBOR.double(1.0).encode()) == "fb3ff0000000000000")
         #expect(hexString(CBOR.float(1.0).encode()) == "fa3f800000")
-        #expect(hexString(CBOR.half(1.0).encode()) == "f93c00")
+        #expect(hexString(CBOR.half(bitPattern: 0x3c00).encode()) == "f93c00") // 1.0
     }
 
     @Test("infinities round-trip at each width")

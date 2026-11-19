@@ -1,8 +1,14 @@
 /// A CBOR tag (major type 6) that annotates the enclosed data item with
 /// additional semantics, as registered in the IANA CBOR Tags registry.
 public struct CBORTag: RawRepresentable, Sendable, Hashable {
+    /// The tag number.
     public var rawValue: UInt64
 
+    /// Create a tag from its number.
+    ///
+    /// Every `UInt64` is a valid tag number. The library gives no tag special
+    /// treatment when decoding a ``CBOR`` value: a tagged item decodes as
+    /// ``CBOR/tagged(_:_:)`` whatever its number.
     public init(rawValue: UInt64) {
         self.rawValue = rawValue
     }
@@ -14,6 +20,7 @@ public struct CBORTag: RawRepresentable, Sendable, Hashable {
 }
 
 extension CBORTag: ExpressibleByIntegerLiteral {
+    /// Create a tag from an integer literal, as in `let tag: CBORTag = 1`.
     public init(integerLiteral value: UInt64) {
         self.rawValue = value
     }

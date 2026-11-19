@@ -13,8 +13,9 @@ Binary Object Representation, RFC 8949) library for Swift.
 - **Complete RFC 8949 support.** Every example in RFC 8949 Appendix A round-trips,
   including tags, indefinite-length items, half/single/double floats, and the full
   ±2⁶⁴ integer range.
-- **Deterministic encoding.** Shortest-form integers and canonically ordered map
-  keys (RFC 8949 §4.2) by default.
+- **Deterministic encoding.** The same value always encodes to the same bytes:
+  shortest-form integers, definite lengths and sorted map keys (RFC 8949 §4.2.1).
+  Floats keep the width they were given rather than being narrowed.
 - **Fast and lean.** Benchmarked against other Swift CBOR libraries, with fewer
   allocations and lower instruction counts across decode and encode.
 - **Two ways to use it.** Work with the `CBOR` value model directly, or bridge any
@@ -28,8 +29,7 @@ Binary Object Representation, RFC 8949) library for Swift.
 
 - Swift 6.3+
 - macOS 13 / iOS 16 / tvOS 16 / watchOS 9 / visionOS 1 / Mac Catalyst 16 (or any
-  Linux with a Swift 6.3 toolchain). Apple Silicon only on macOS: `Float16` is not
-  available on Intel Macs.
+  Linux with a Swift 6.3 toolchain)
 
 ## Installation
 
@@ -37,7 +37,7 @@ Add the package to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/brokenhandsio/swift-cbor.git", from: "0.0.1"),
+    .package(url: "https://github.com/brokenhandsio/swift-cbor.git", from: "1.0.0-rc.1"),
 ],
 ```
 
@@ -64,16 +64,33 @@ import CBOR
 
 let value = try CBOR.decode([0x83, 0x01, 0x02, 0x03])
 // value == .array([.unsignedInt(1), .unsignedInt(2), .unsignedInt(3)])
+print(value) // [1, 2, 3]
 ```
 
+Values print in CBOR diagnostic notation (RFC 8949 §8), such as
+`{1: 2, "at": 1(1363896240), "id": h'01ff'}`, with map keys in their encoded
+order so the output is stable.
+
 You can decode from a `[UInt8]`, an `ArraySlice<UInt8>`, or a `Span<UInt8>` directly.
+
+Malformed input throws a `CBORError` that says where the problem is, as a byte
+offset into the input:
+
+```swift
+do {
+    _ = try CBOR.decode([0x82, 0x01, 0x62, 0xff, 0xff])
+} catch let error as CBORError {
+    print(error)        // Invalid UTF-8 in the text string at offset 2
+    print(error.offset) // 2
+}
+```
 
 ### Encoding
 
 ```swift
 let item: CBOR = ["temperature": 21, "unit": "C"]
 let bytes = item.encode()
-// Map keys are emitted in RFC 8949 deterministic order.
+// Map keys are always sorted (RFC 8949 §4.2.1), so the bytes are stable.
 ```
 
 ### Building and reading values
@@ -93,19 +110,19 @@ let message: CBOR = [
 Read back with subscripts and typed accessors (each returns `nil` on a mismatch):
 
 ```swift
-message["id"]?.int            // 42
-message["tags"]?[.unsignedInt(0)]?.string   // "a"
-message["payload"]?.bytes     // [0xde, 0xad, 0xbe, 0xef]
-message["note"]?.isNull       // true
+message["id"]?.intValue                          // 42
+message["tags"]?[.unsignedInt(0)]?.stringValue   // "a"
+message["payload"]?.bytesValue                   // [0xde, 0xad, 0xbe, 0xef]
+message["note"]?.isNull                          // true
 ```
 
 Negative integers follow the CBOR encoding, where `.negativeInt(n)` represents
-`-1 - n` (so `-1` is `.negativeInt(0)`). The `int` accessor and integer literals
+`-1 - n` (so `-1` is `.negativeInt(0)`). The `intValue` accessor and integer literals
 hide this for you:
 
 ```swift
 let alg: CBOR = -7            // .negativeInt(6)
-alg.int                       // -7
+alg.intValue                  // -7
 ```
 
 ### Codable
@@ -123,9 +140,15 @@ let bytes = try CBOREncoder().encode(Reading(sensor: "abc", value: 1.5, ok: true
 let reading = try CBORDecoder().decode(Reading.self, from: bytes)
 ```
 
-Swift structs encode to CBOR maps keyed by their property names, in deterministic
-key order. With the `FoundationSupport` trait enabled (the default), `Data`
-properties encode as CBOR byte strings.
+Swift structs encode to CBOR maps keyed by their property names, with the keys
+sorted. With the `FoundationSupport` trait enabled (the default), two Foundation
+types get a native CBOR form:
+
+- `Data` encodes as a byte string.
+- `Date` encodes as epoch-based date/time (tag 1): seconds since 1970, as an
+  integer for a whole second and a double otherwise. Decoding also accepts a bare
+  number of seconds, as CWT and similar protocols write timestamps. Text dates
+  (tag 0) don't decode as `Date`.
 
 ### Decoding an embedded item
 
@@ -137,20 +160,21 @@ let (value, consumed) = try CBOR.decodeFirst(buffer)
 let remainder = buffer[consumed...]
 ```
 
-### Options
+### Decoding options
 
 ```swift
-let options = CBOROptions(
-    maximumDepth: 16,            // bound nesting on adversarial input (default 512)
-    rejectDuplicateMapKeys: true // throw on duplicate map keys (default false)
+let options = CBORDecodingOptions(
+    maximumDepth: 16,             // bound nesting on adversarial input (default 512)
+    rejectDuplicateMapKeys: false // accept duplicate map keys, last wins (default true)
 )
 let value = try CBOR.decode(bytes, options: options)
+let reading = try CBORDecoder(options: options).decode(Reading.self, from: bytes)
 ```
 
-`CBOROptions` also controls `deterministic` encoding, which is on by default.
+Encoding takes no options: its output is always deterministic.
 
-`maximumDepth` is bounded by `CBOROptions.maximumSupportedDepth` (1024). Raising
-`maximumDepth` above it has no effect — decoding still stops at the ceiling. That
+`maximumDepth` is bounded by `CBORDecodingOptions.maximumSupportedDepth` (1024).
+Raising `maximumDepth` above it has no effect — decoding still stops at the ceiling. That
 bound is not a preference, it is the thing that keeps the guarantee in
 **[Limits](#limits)** true whatever a caller passes.
 
@@ -172,7 +196,7 @@ dependency, disable default traits:
 ```swift
 .package(
     url: "https://github.com/brokenhandsio/swift-cbor.git",
-    from: "0.0.1",
+    from: "1.0.0-rc.1",
     traits: [] // enable no traits, omitting the default FoundationSupport
 ),
 ```
@@ -228,8 +252,8 @@ high-water mark that moves with allocator behaviour and runner image.
 Like any Swift CBOR library built on a recursive value type, a decoded `CBOR` value is
 **deallocated recursively** — freeing a value nested many thousands of levels deep can
 exhaust the stack. Decoding and encoding themselves are fully iterative and never
-recurse on input nesting, and `CBOROptions.maximumDepth` (default 512) bounds how deep
-a decoded value can be, so values decoded from untrusted input free safely on ordinary
+recurse on input nesting, and `CBORDecodingOptions.maximumDepth` (default 512) bounds
+how deep a decoded value can be, so values decoded from untrusted input free safely on ordinary
 stacks. Lower `maximumDepth` if you decode on threads with unusually small stacks.
 
 Raising it does not remove the bound: `maximumSupportedDepth` (1024) is a hard ceiling
@@ -249,7 +273,7 @@ libFuzzer harnesses against the real API:
 | `CBORDecode` | Decoding arbitrary bytes |
 | `CBORRoundTrip` | Decode, re-encode, decode again — asserting a fixed point |
 | `CBORDeepNesting` | Nesting depth, with inputs far larger than libFuzzer's default |
-| `CBOROptions` | The options themselves: depth limit, duplicate-key rejection, determinism |
+| `CBOROptions` | The options themselves: depth limit and duplicate-key rejection |
 | `CBORDecodeFirst` | That `decodeFirst` never reports consuming more bytes than it was given |
 | `CBORCodable` | The `Codable` bridge, asserting a deterministic encode fixed point |
 

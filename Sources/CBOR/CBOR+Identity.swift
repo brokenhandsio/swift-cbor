@@ -23,6 +23,13 @@
 //   same ambiguity from the other direction.
 
 extension CBOR {
+    /// Whether two values are the same CBOR data item.
+    ///
+    /// Floats compare by bit pattern rather than by IEEE 754 equality: a NaN
+    /// equals an identical NaN, `0.0` and `-0.0` are different, and ``half(bitPattern:)``,
+    /// ``float(_:)`` and ``double(_:)`` never equal one another, even for the same
+    /// number. Nested values are compared iteratively, so comparing deeply nested
+    /// values cannot overflow the stack.
     public static func == (lhs: CBOR, rhs: CBOR) -> Bool {
         // Fast path. Scalars are the overwhelming majority of comparisons —
         // every map-key lookup during decoding lands here — so they must not
@@ -38,7 +45,7 @@ extension CBOR {
         case (.null, .null): return true
         case (.undefined, .undefined): return true
         // Bit patterns rather than IEEE equality: see the note above.
-        case (.half(let a), .half(let b)): return a.bitPattern == b.bitPattern
+        case (.half(let a), .half(let b)): return a == b // already a bit pattern
         case (.float(let a), .float(let b)): return a.bitPattern == b.bitPattern
         case (.double(let a), .double(let b)): return a.bitPattern == b.bitPattern
         case (.array, .array), (.map, .map), (.tagged, .tagged):
@@ -52,7 +59,7 @@ extension CBOR {
     ///
     /// Native recursion here would be a stack overflow waiting to happen: a
     /// value nested `n` deep costs `n` frames, and `n` is attacker-controlled
-    /// up to `CBOROptions.maximumDepth`, which callers may raise. The parser
+    /// up to `CBORDecodingOptions.maximumDepth`, which callers may raise. The parser
     /// and encoder avoid recursion for the same reason, so comparison should
     /// not be the one place that reintroduces the limit.
     private static func deepEqual(_ lhs: CBOR, _ rhs: CBOR) -> Bool {
@@ -86,6 +93,11 @@ extension CBOR {
         return true
     }
 
+    /// Hash the value consistently with `==`.
+    ///
+    /// Hashing looks only at the first 16 levels of nesting, so it cannot
+    /// overflow the stack. Values that differ only below that depth hash the same,
+    /// and `==` tells them apart.
     public func hash(into hasher: inout Hasher) {
         hash(into: &hasher, depthBudget: Self.hashDepthBudget)
     }
@@ -94,7 +106,7 @@ extension CBOR {
     ///
     /// Synthesized hashing recursed once per level of nesting and overflowed the
     /// stack somewhere between depth 512 and 1000 — uncomfortably close to the
-    /// default `CBOROptions.maximumDepth` of 512, and reachable from decoded
+    /// default `CBORDecodingOptions.maximumDepth` of 512, and reachable from decoded
     /// input the moment a caller raises that limit, because the parser stores
     /// map keys with `pairs[key] = value`.
     ///
@@ -135,9 +147,9 @@ extension CBOR {
         // Bit patterns, to stay consistent with `==`. The standard library
         // would do the same except for normalising -0.0 to +0.0, which `==` now
         // treats as a different value.
-        case .half(let value):
+        case .half(let bits):
             hasher.combine(11 as UInt8)
-            hasher.combine(value.bitPattern)
+            hasher.combine(bits)
         case .float(let value):
             hasher.combine(12 as UInt8)
             hasher.combine(value.bitPattern)

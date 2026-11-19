@@ -36,6 +36,31 @@ struct DeterministicEncodingTests {
         #expect(hexString(map.encode()) == "a20108616109")
     }
 
+    @Test("floats keep the width of their case rather than being narrowed")
+    func floatsKeepTheirWidth() {
+        // RFC 8949 §4.2.1 would write all three as the half f93e00. swift-cbor
+        // keeps the declared width, as CTAP2's canonical form also requires.
+        #expect(hexString(CBOR.half(bitPattern: 0x3e00).encode()) == "f93e00")
+        #expect(hexString(CBOR.float(1.5).encode()) == "fa3fc00000")
+        #expect(hexString(CBOR.double(1.5).encode()) == "fb3ff8000000000000")
+    }
+
+    @Test("lengths are always definite")
+    func definiteLengths() throws {
+        // An indefinite-length array and map decode, but encode with definite lengths.
+        let array = try CBOR.decode([0x9f, 0x01, 0x02, 0xff])
+        #expect(hexString(array.encode()) == "820102")
+        let map = try CBOR.decode([0xbf, 0x61, 0x61, 0x01, 0xff])
+        #expect(hexString(map.encode()) == "a1616101")
+    }
+
+    @Test("the Codable encoder sorts keys too")
+    func codableKeysSorted() throws {
+        // Declared out of order; "a" (6161) sorts before "b" (6162).
+        struct OutOfOrder: Encodable { var b = 2; var a = 1 }
+        #expect(hexString(try CBOREncoder().encode(OutOfOrder())) == "a2616101616202")
+    }
+
     @Test("encoding is stable across repeated calls")
     func stability() {
         let map: CBOR = ["a": "A", "b": "B", "c": "C", "d": "D", "e": "E"]

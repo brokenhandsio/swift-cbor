@@ -48,15 +48,15 @@ struct SubscriptAndLiteralTests {
 
     @Test("typed accessors")
     func accessors() {
-        #expect((42 as CBOR).int == 42)
-        #expect((-7 as CBOR).int == -7)
-        #expect(CBOR.unsignedInt(42).uint64 == 42)
-        #expect(CBOR.byteString([1, 2]).bytes == [1, 2])
-        #expect(CBOR.textString("x").string == "x")
+        #expect((42 as CBOR).intValue == 42)
+        #expect((-7 as CBOR).intValue == -7)
+        #expect(CBOR.unsignedInt(42).uint64Value == 42)
+        #expect(CBOR.byteString([1, 2]).bytesValue == [1, 2])
+        #expect(CBOR.textString("x").stringValue == "x")
         #expect(CBOR.bool(true).boolValue == true)
         #expect(CBOR.double(1.5).doubleValue == 1.5)
-        #expect(CBOR.half(1.5).doubleValue == 1.5)
+        #expect(CBOR.half(bitPattern: 0x3e00).doubleValue == 1.5)
         #expect(CBOR.null.isNull)
-        #expect(CBOR.textString("x").int == nil)
+        #expect(CBOR.textString("x").intValue == nil)
     }
 }

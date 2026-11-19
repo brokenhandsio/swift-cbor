@@ -7,8 +7,8 @@
 /// ## Nesting depth
 ///
 /// `CBOR` is a recursive value type: an array holds `[CBOR]`, whose elements hold
-/// more. Parsing, encoding and equality all walk that structure iteratively, and
-/// hashing is depth-bounded, so none of them recurse. *Releasing* a value is done
+/// more. Parsing, encoding, equality and printing all walk that structure
+/// iteratively, and hashing is depth-bounded, so none of them recurse. *Releasing* a value is done
 /// by the Swift runtime, which does recurse — roughly 280 bytes of stack per level.
 /// That is fine at any depth real data reaches, but a value nested many thousands
 /// deep can overflow the stack when it goes out of scope, and the exact limit
@@ -16,7 +16,7 @@
 /// thread, but only around 1,800 on the 512 KB threads Swift concurrency uses.
 ///
 /// Decoding cannot produce such a value: it is capped at
-/// ``CBOROptions/maximumSupportedDepth``, and both ``CBOR/decode(_:options:)-(Span<UInt8>,_)``
+/// ``CBORDecodingOptions/maximumSupportedDepth``, and both ``CBOR/decode(_:options:)-(Span<UInt8>,_)``
 /// and ``CBORDecoder`` go through that cap. Nothing else in this library builds
 /// nested values either, so the limit is only reachable by writing a loop that
 /// deliberately nests one — which no real code does.
@@ -39,7 +39,7 @@ public enum CBOR: Sendable, Hashable {
     /// `.negativeInt(9)` is `-10`. This representation preserves the full CBOR
     /// negative range down to `-2^64`, which does not fit in `Int64`.
     ///
-    /// Use ``int`` for the signed value when it fits in `Int`.
+    /// Use ``intValue`` for the signed value when it fits in `Int`.
     case negativeInt(UInt64)
 
     /// A byte string (major type 2).
@@ -54,14 +54,19 @@ public enum CBOR: Sendable, Hashable {
     /// A map of key/value pairs (major type 5).
     ///
     /// Modeled as a Swift dictionary: lookups are O(1) and duplicate keys are not
-    /// representable. Encoding emits keys in deterministic (RFC 8949 §4.2) order.
+    /// representable. Encoding always sorts the keys (RFC 8949 §4.2.1), so a map
+    /// encodes to the same bytes whatever order its entries were added in.
     case map([CBOR: CBOR])
 
     /// A tagged data item (major type 6): a ``CBORTag`` annotating a nested item.
     indirect case tagged(CBORTag, CBOR)
 
     /// A simple value (major type 7) other than the dedicated cases below.
-    case simple(UInt8)
+    ///
+    /// ``CBORSimpleValue`` cannot hold 20–23 (those are ``bool(_:)``, ``null`` and
+    /// ``undefined``) or the reserved 24–31, so this case never duplicates another
+    /// or produces ill-formed bytes. A literal works directly: `.simple(16)`.
+    case simple(CBORSimpleValue)
 
     /// A boolean (major type 7, simple values 20 and 21).
     case bool(Bool)
@@ -72,8 +77,14 @@ public enum CBOR: Sendable, Hashable {
     /// The `undefined` value (major type 7, simple value 23).
     case undefined
 
-    /// An IEEE 754 half-precision float (major type 7, additional info 25).
-    case half(Float16)
+    /// An IEEE 754 half-precision float (major type 7, additional info 25), held as
+    /// its 16-bit pattern.
+    ///
+    /// The bits are stored rather than a `Float16` because `Float16` is unavailable
+    /// on Intel Macs. They also round-trip exactly, NaN payloads included. Use
+    /// ``doubleValue`` for the numeric value on any platform, or
+    /// `Float16(bitPattern:)` where `Float16` exists.
+    case half(bitPattern: UInt16)
 
     /// An IEEE 754 single-precision float (major type 7, additional info 26).
     case float(Float)

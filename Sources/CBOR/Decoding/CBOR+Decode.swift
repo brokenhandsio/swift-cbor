@@ -10,12 +10,22 @@ extension CBOR {
     ///   depth limit is exceeded.
     public static func decode(
         _ bytes: Span<UInt8>,
-        options: CBOROptions = .default
+        options: CBORDecodingOptions = .default
+    ) throws -> CBOR {
+        try decode(bytes, options: options, source: nil)
+    }
+
+    /// `decode(_:options:)`, with the array slice `bytes` views, if there is one,
+    /// for copying byte strings out of.
+    static func decode(
+        _ bytes: Span<UInt8>,
+        options: CBORDecodingOptions,
+        source: ArraySlice<UInt8>?
     ) throws -> CBOR {
         var offset = 0
-        let value = try CBORParser.parseItem(bytes, &offset, options: options)
+        let value = try CBORParser.parseItem(bytes, &offset, options: options, source: source)
         guard offset == bytes.count else {
-            throw CBORError.trailingData(remaining: bytes.count - offset)
+            throw CBORError.trailingData(remaining: bytes.count - offset, offset: offset)
         }
         return value
     }
@@ -31,10 +41,20 @@ extension CBOR {
     ///   start of `bytes`.
     public static func decodeFirst(
         _ bytes: Span<UInt8>,
-        options: CBOROptions = .default
+        options: CBORDecodingOptions = .default
+    ) throws -> (value: CBOR, bytesConsumed: Int) {
+        try decodeFirst(bytes, options: options, source: nil)
+    }
+
+    /// `decodeFirst(_:options:)`, with the array slice `bytes` views, if there is
+    /// one, for copying byte strings out of.
+    static func decodeFirst(
+        _ bytes: Span<UInt8>,
+        options: CBORDecodingOptions,
+        source: ArraySlice<UInt8>?
     ) throws -> (value: CBOR, bytesConsumed: Int) {
         var offset = 0
-        let value = try CBORParser.parseItem(bytes, &offset, options: options)
+        let value = try CBORParser.parseItem(bytes, &offset, options: options, source: source)
         return (value, offset)
     }
 }
@@ -45,7 +65,7 @@ extension CBOR {
     /// Decode exactly one CBOR data item from an array of bytes.
     public static func decode(
         _ bytes: [UInt8],
-        options: CBOROptions = .default
+        options: CBORDecodingOptions = .default
     ) throws -> CBOR {
         // Go through the slice overload to avoid copying the array and allow it to work on older OS versions
         try decode(bytes[...], options: options)
@@ -54,16 +74,16 @@ extension CBOR {
     /// Decode exactly one CBOR data item from a slice of bytes.
     public static func decode(
         _ bytes: ArraySlice<UInt8>,
-        options: CBOROptions = .default
+        options: CBORDecodingOptions = .default
     ) throws -> CBOR {
-        try decode(bytes.span, options: options)
+        try decode(bytes.span, options: options, source: bytes)
     }
 
     /// Decode the first CBOR data item from an array of bytes, reporting how many
     /// bytes it consumed.
     public static func decodeFirst(
         _ bytes: [UInt8],
-        options: CBOROptions = .default
+        options: CBORDecodingOptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
         try decodeFirst(bytes[...], options: options)
     }
@@ -72,8 +92,8 @@ extension CBOR {
     /// bytes it consumed.
     public static func decodeFirst(
         _ bytes: ArraySlice<UInt8>,
-        options: CBOROptions = .default
+        options: CBORDecodingOptions = .default
     ) throws -> (value: CBOR, bytesConsumed: Int) {
-        try decodeFirst(bytes.span, options: options)
+        try decodeFirst(bytes.span, options: options, source: bytes)
     }
 }

@@ -10,8 +10,8 @@ private func nestedIndefiniteArrays(_ depth: Int) -> [UInt8] {
 struct SupportedDepthTests {
     @Test("Decoding at the ceiling succeeds")
     func atCeiling() throws {
-        let bytes = nestedIndefiniteArrays(CBOROptions.maximumSupportedDepth - 1)
-        let options = CBOROptions(maximumDepth: .max)
+        let bytes = nestedIndefiniteArrays(CBORDecodingOptions.maximumSupportedDepth - 1)
+        let options = CBORDecodingOptions(maximumDepth: .max)
         _ = try CBOR.decode(bytes, options: options)
     }
 
@@ -20,12 +20,12 @@ struct SupportedDepthTests {
         // Before this cap the value below decoded successfully and then crashed
         // when it was released — a stack overflow the caller could not catch.
         // Now it is an ordinary error.
-        let bytes = nestedIndefiniteArrays(CBOROptions.maximumSupportedDepth + 200)
+        let bytes = nestedIndefiniteArrays(CBORDecodingOptions.maximumSupportedDepth + 200)
         #expect(throws: CBORError.self) {
-            try CBOR.decode(bytes, options: CBOROptions(maximumDepth: .max))
+            try CBOR.decode(bytes, options: CBORDecodingOptions(maximumDepth: .max))
         }
         #expect(throws: CBORError.self) {
-            try CBOR.decode(bytes, options: CBOROptions(maximumDepth: 100_000))
+            try CBOR.decode(bytes, options: CBORDecodingOptions(maximumDepth: 100_000))
         }
     }
 
@@ -33,13 +33,13 @@ struct SupportedDepthTests {
     func lowerLimitsStillApply() {
         // The clamp is a ceiling, not an override.
         #expect(throws: CBORError.self) {
-            try CBOR.decode(nestedIndefiniteArrays(20), options: CBOROptions(maximumDepth: 10))
+            try CBOR.decode(nestedIndefiniteArrays(20), options: CBORDecodingOptions(maximumDepth: 10))
         }
     }
 
     @Test("The default limit is well inside the ceiling")
     func defaultIsInsideCeiling() {
-        #expect(CBOROptions.default.maximumDepth <= CBOROptions.maximumSupportedDepth)
+        #expect(CBORDecodingOptions.default.maximumDepth <= CBORDecodingOptions.maximumSupportedDepth)
     }
 
     @Test("A value decoded at the ceiling can be released without overflowing")
@@ -49,8 +49,8 @@ struct SupportedDepthTests {
         // that matter (~1,800 levels measured, versus ~30,000 on the main thread).
         for _ in 0..<5 {
             let value = try CBOR.decode(
-                nestedIndefiniteArrays(CBOROptions.maximumSupportedDepth - 1),
-                options: CBOROptions(maximumDepth: .max))
+                nestedIndefiniteArrays(CBORDecodingOptions.maximumSupportedDepth - 1),
+                options: CBORDecodingOptions(maximumDepth: .max))
             if case .array = value {} else { Issue.record("expected an array") }
         }
     }

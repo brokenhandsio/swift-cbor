@@ -28,7 +28,7 @@ struct DeepHashingTests {
         var bytes: [UInt8] = [0xbf]                  // indefinite-length map
         bytes += [UInt8](repeating: 0x81, count: 1_000)  // key: 1000 nested arrays
         bytes += [0x00, 0x00, 0xff]                  // leaf, value, break
-        let value = try CBOR.decode(bytes, options: CBOROptions(maximumDepth: .max))
+        let value = try CBOR.decode(bytes, options: CBORDecodingOptions(maximumDepth: .max))
         guard case .map(let entries) = value else {
             Issue.record("expected a map, got \(value)")
             return
