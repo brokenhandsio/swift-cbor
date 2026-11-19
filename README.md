@@ -92,19 +92,19 @@ let message: CBOR = [
 Read back with subscripts and typed accessors (each returns `nil` on a mismatch):
 
 ```swift
-message["id"]?.int            // 42
-message["tags"]?[.unsignedInt(0)]?.string   // "a"
-message["payload"]?.bytes     // [0xde, 0xad, 0xbe, 0xef]
-message["note"]?.isNull       // true
+message["id"]?.intValue                          // 42
+message["tags"]?[.unsignedInt(0)]?.stringValue   // "a"
+message["payload"]?.bytesValue                   // [0xde, 0xad, 0xbe, 0xef]
+message["note"]?.isNull                          // true
 ```
 
 Negative integers follow the CBOR encoding, where `.negativeInt(n)` represents
-`-1 - n` (so `-1` is `.negativeInt(0)`). The `int` accessor and integer literals
+`-1 - n` (so `-1` is `.negativeInt(0)`). The `intValue` accessor and integer literals
 hide this for you:
 
 ```swift
 let alg: CBOR = -7            // .negativeInt(6)
-alg.int                       // -7
+alg.intValue                  // -7
 ```
 
 ### Codable

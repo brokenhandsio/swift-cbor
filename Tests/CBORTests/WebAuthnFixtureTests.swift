@@ -26,10 +26,10 @@ struct WebAuthnFixtureTests {
 
         #expect(key[.unsignedInt(1)] == .unsignedInt(2))
         #expect(key[.unsignedInt(3)] == .negativeInt(6))
-        #expect(key[.unsignedInt(3)]?.int == -7)
+        #expect(key[.unsignedInt(3)]?.intValue == -7)
         #expect(key[.negativeInt(0)] == .unsignedInt(1))
-        #expect(key[.negativeInt(1)]?.bytes == Self.x)
-        #expect(key[.negativeInt(2)]?.bytes == Self.y)
+        #expect(key[.negativeInt(1)]?.bytesValue == Self.x)
+        #expect(key[.negativeInt(2)]?.bytesValue == Self.y)
     }
 
     @Test("COSE key encodes in CTAP2 canonical key order")
@@ -53,7 +53,7 @@ struct WebAuthnFixtureTests {
 
         #expect(decoded["fmt"] == .textString("none"))
         #expect(decoded["attStmt"] == .map([:]))
-        #expect(decoded["authData"]?.bytes == authData)
+        #expect(decoded["authData"]?.bytesValue == authData)
 
         // The empty-map equality check used by AttestationObject.verify.
         #expect(decoded["attStmt"] == .map([:]))

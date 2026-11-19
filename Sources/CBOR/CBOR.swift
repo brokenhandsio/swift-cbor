@@ -39,7 +39,7 @@ public enum CBOR: Sendable, Hashable {
     /// `.negativeInt(9)` is `-10`. This representation preserves the full CBOR
     /// negative range down to `-2^64`, which does not fit in `Int64`.
     ///
-    /// Use ``int`` for the signed value when it fits in `Int`.
+    /// Use ``intValue`` for the signed value when it fits in `Int`.
     case negativeInt(UInt64)
 
     /// A byte string (major type 2).
