@@ -58,7 +58,7 @@ struct FloatKeyIdentityTests {
         #expect(entries.count == 1)
     }
 
-    @Test("Encoding is a fixed point for maps with NaN keys", .serialized)
+    @Test("Encoding is a fixed point for maps with NaN keys")
     func encodingIsStable() throws {
         // Repeated because the instability came from `Dictionary` iteration
         // order, which Swift seeds per process — a single pass would have
