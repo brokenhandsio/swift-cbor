@@ -32,6 +32,7 @@ let reading = try CBORDecoder().decode(Reading.self, from: encoded)
 
 - ``CBOR``
 - ``CBORTag``
+- ``CBORSimpleValue``
 
 ### Decoding and encoding
 

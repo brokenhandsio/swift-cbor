@@ -384,7 +384,7 @@ enum CBORParser {
     ) throws -> CBOR {
         switch additional {
         case 0..<20:
-            return .simple(additional)
+            return .simple(CBORSimpleValue(unchecked: additional))
         case 20:
             return .bool(false)
         case 21:
@@ -397,7 +397,7 @@ enum CBORParser {
             let value = try readByte(span, &offset)
             // Simple values 0...31 must use the single-byte form, not 0xf8.
             guard value >= 32 else { throw CBORError.reservedAdditionalInfo(24) }
-            return .simple(value)
+            return .simple(CBORSimpleValue(unchecked: value))
         case 25:
             return .half(bitPattern: try readUInt16(span, &offset))
         case 26:

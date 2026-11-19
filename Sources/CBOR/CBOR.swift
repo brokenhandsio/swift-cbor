@@ -61,7 +61,11 @@ public enum CBOR: Sendable, Hashable {
     indirect case tagged(CBORTag, CBOR)
 
     /// A simple value (major type 7) other than the dedicated cases below.
-    case simple(UInt8)
+    ///
+    /// ``CBORSimpleValue`` cannot hold 20–23 (those are ``bool(_:)``, ``null`` and
+    /// ``undefined``) or the reserved 24–31, so this case never duplicates another
+    /// or produces ill-formed bytes. A literal works directly: `.simple(16)`.
+    case simple(CBORSimpleValue)
 
     /// A boolean (major type 7, simple values 20 and 21).
     case bool(Bool)

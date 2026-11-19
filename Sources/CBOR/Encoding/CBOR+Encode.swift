@@ -61,9 +61,11 @@ extension CBOR {
             appendTypedArgument(major: 3, UInt64(utf8.count), to: &out)
             out.append(contentsOf: utf8)
         case .simple(let value):
-            // Major 7: values < 24 are single-byte, 24...255 use the 0xf8 prefix,
-            // which is exactly the head encoding for the argument.
-            appendTypedArgument(major: 7, UInt64(value), to: &out)
+            // Major 7 with the value as its argument: 0...19 fit in the head byte and
+            // 32...255 take the 0xf8 prefix. `CBORSimpleValue` rules out 20...31, the
+            // values that would collide with `.bool`/`.null`/`.undefined` or need the
+            // ill-formed two-byte form.
+            appendTypedArgument(major: 7, UInt64(value.rawValue), to: &out)
         case .bool(let value):
             out.append(value ? 0xf5 : 0xf4)
         case .null:
