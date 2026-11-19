@@ -3,7 +3,7 @@
 /// Nested containers are tracked on an explicit heap-allocated stack rather than
 /// via native recursion, so the parser's native stack usage is O(1) regardless of
 /// how deeply the input nests. Decoding hostile, deeply nested input fails with
-/// ``CBORError/maxDepthExceeded(_:)`` instead of trapping.
+/// ``CBORError/maxDepthExceeded(limit:offset:)`` instead of trapping.
 ///
 /// Depth is capped at ``CBORDecodingOptions/maximumSupportedDepth`` regardless of what
 /// ``CBORDecodingOptions/maximumDepth`` requests. Parsing itself would happily go deeper —
@@ -19,18 +19,21 @@ enum CBORParser {
     private struct Frame {
         enum Kind { case array, indefiniteArray, map, indefiniteMap, tag }
         var kind: Kind
+        var start: Int                    // offset of the container's head, for errors
         var remaining: Int = 0            // definite array/map: children/pairs still expected
         var items: [CBOR] = []
         var pairs: [CBOR: CBOR] = [:]
         var pendingKey: CBOR? = nil       // map: a key awaiting its value
+        var pendingKeyStart: Int = 0      // map: offset of `pendingKey`, for errors
         var tag: CBORTag = CBORTag(0)
 
         var isIndefinite: Bool { kind == .indefiniteArray || kind == .indefiniteMap }
 
-        /// Incorporate a completed child `value`. Returns the finished container when
-        /// this frame is now complete, otherwise `nil`.
+        /// Incorporate a completed child `value`, whose head is at `valueStart`.
+        /// Returns the finished container when this frame is now complete, otherwise
+        /// `nil`.
         @inline(__always)
-        mutating func accept(_ value: CBOR, rejectDuplicates: Bool) throws -> CBOR? {
+        mutating func accept(_ value: CBOR, at valueStart: Int, rejectDuplicates: Bool) throws -> CBOR? {
             switch kind {
             case .array:
                 items.append(value)
@@ -44,22 +47,24 @@ enum CBORParser {
                     // `updateValue` both inserts and reports a previous entry, so
                     // rejecting duplicates costs no extra hash lookup.
                     if pairs.updateValue(value, forKey: key) != nil, rejectDuplicates {
-                        throw CBORError.duplicateMapKey
+                        throw CBORError.duplicateMapKey(offset: pendingKeyStart)
                     }
                     pendingKey = nil
                     remaining -= 1
                     return remaining == 0 ? .map(pairs) : nil
                 }
                 pendingKey = value
+                pendingKeyStart = valueStart
                 return nil
             case .indefiniteMap:
                 if let key = pendingKey {
                     if pairs.updateValue(value, forKey: key) != nil, rejectDuplicates {
-                        throw CBORError.duplicateMapKey
+                        throw CBORError.duplicateMapKey(offset: pendingKeyStart)
                     }
                     pendingKey = nil
                 } else {
                     pendingKey = value
+                    pendingKeyStart = valueStart
                 }
                 return nil
             case .tag:
@@ -89,16 +94,19 @@ enum CBORParser {
             // every single iteration.
             if offset < span.count, span[offset] == 0xff,
                !stack.isEmpty, stack[stack.count - 1].isIndefinite {
+                let breakOffset = offset
                 offset += 1
                 let frame = stack.removeLast()
                 let completed: CBOR
                 if frame.kind == .indefiniteArray {
                     completed = .array(frame.items)
                 } else {
-                    if frame.pendingKey != nil { throw CBORError.invalidIndefiniteLength }
+                    if frame.pendingKey != nil {
+                        throw CBORError.invalidIndefiniteLength(offset: breakOffset)
+                    }
                     completed = .map(frame.pairs)
                 }
-                if let result = try attach(completed, to: &stack, rejectDuplicates: rejectDuplicates) {
+                if let result = try attach(completed, at: frame.start, to: &stack, rejectDuplicates: rejectDuplicates) {
                     return result
                 }
                 continue
@@ -106,10 +114,12 @@ enum CBORParser {
 
             // The item about to be read sits at depth `stack.count`.
             if stack.count > maxDepth {
-                throw CBORError.maxDepthExceeded(maxDepth)
+                throw CBORError.maxDepthExceeded(limit: maxDepth, offset: offset)
             }
 
-            let initialByte = try readByte(span, &offset)
+            // Where this item's head is: every error raised while reading it says so.
+            let start = offset
+            let initialByte = try readByte(span, &offset, item: start)
             let major = initialByte >> 5
             let additional = initialByte & 0x1f
 
@@ -117,37 +127,37 @@ enum CBORParser {
             var scalar: CBOR? = nil
             switch major {
             case 0:
-                scalar = .unsignedInt(try readArgument(additional, span, &offset))
+                scalar = .unsignedInt(try readArgument(additional, span, &offset, item: start))
 
             case 1:
-                scalar = .negativeInt(try readArgument(additional, span, &offset))
+                scalar = .negativeInt(try readArgument(additional, span, &offset, item: start))
 
             case 2:
                 if additional == 31 {
-                    scalar = try readIndefiniteByteString(span, &offset)
+                    scalar = try readIndefiniteByteString(span, &offset, item: start)
                 } else {
-                    let length = try readArgument(additional, span, &offset)
-                    scalar = .byteString(try readBytes(length, span, &offset))
+                    let length = try readArgument(additional, span, &offset, item: start)
+                    scalar = .byteString(try readBytes(length, span, &offset, item: start))
                 }
 
             case 3:
                 if additional == 31 {
-                    scalar = try readIndefiniteTextString(span, &offset)
+                    scalar = try readIndefiniteTextString(span, &offset, item: start)
                 } else {
-                    let length = try readArgument(additional, span, &offset)
-                    scalar = .textString(try readTextString(length, span, &offset))
+                    let length = try readArgument(additional, span, &offset, item: start)
+                    scalar = .textString(try readTextString(length, span, &offset, item: start))
                 }
 
             case 4:
                 if additional == 31 {
-                    stack.append(Frame(kind: .indefiniteArray))
+                    stack.append(Frame(kind: .indefiniteArray, start: start))
                     continue
                 }
-                let count = try readCount(additional, span, &offset)
+                let count = try readCount(additional, span, &offset, item: start)
                 if count == 0 {
                     scalar = .array([])
                 } else {
-                    var frame = Frame(kind: .array)
+                    var frame = Frame(kind: .array, start: start)
                     frame.remaining = count
                     frame.items.reserveCapacity(min(count, 1024))
                     stack.append(frame)
@@ -156,14 +166,14 @@ enum CBORParser {
 
             case 5:
                 if additional == 31 {
-                    stack.append(Frame(kind: .indefiniteMap))
+                    stack.append(Frame(kind: .indefiniteMap, start: start))
                     continue
                 }
-                let count = try readCount(additional, span, &offset)
+                let count = try readCount(additional, span, &offset, item: start)
                 if count == 0 {
                     scalar = .map([:])
                 } else {
-                    var frame = Frame(kind: .map)
+                    var frame = Frame(kind: .map, start: start)
                     frame.remaining = count
                     frame.pairs.reserveCapacity(min(count, 1024))
                     stack.append(frame)
@@ -171,33 +181,39 @@ enum CBORParser {
                 }
 
             case 6:
-                var frame = Frame(kind: .tag)
-                frame.tag = CBORTag(try readArgument(additional, span, &offset))
+                var frame = Frame(kind: .tag, start: start)
+                frame.tag = CBORTag(try readArgument(additional, span, &offset, item: start))
                 stack.append(frame)
                 continue
 
             default: // 7
-                scalar = try parseSimpleOrFloat(additional, span, &offset)
+                scalar = try parseSimpleOrFloat(additional, span, &offset, item: start)
             }
 
-            if let scalar, let result = try attach(scalar, to: &stack, rejectDuplicates: rejectDuplicates) {
+            if let scalar, let result = try attach(scalar, at: start, to: &stack, rejectDuplicates: rejectDuplicates) {
                 return result
             }
         }
     }
 
-    /// Attach a completed value to the innermost open container, cascading upward as
-    /// containers fill. Returns the top-level value once the stack is empty.
+    /// Attach a completed value, whose head is at `start`, to the innermost open
+    /// container, cascading upward as containers fill. Returns the top-level value
+    /// once the stack is empty.
     @inline(__always)
     private static func attach(
         _ value: CBOR,
+        at start: Int,
         to stack: inout [Frame],
         rejectDuplicates: Bool
     ) throws -> CBOR? {
         var current = value
+        var currentStart = start
         while true {
             if stack.isEmpty { return current }
-            if let completed = try stack[stack.count - 1].accept(current, rejectDuplicates: rejectDuplicates) {
+            if let completed = try stack[stack.count - 1].accept(
+                current, at: currentStart, rejectDuplicates: rejectDuplicates
+            ) {
+                currentStart = stack[stack.count - 1].start
                 stack.removeLast()
                 current = completed
             } else {
@@ -207,10 +223,13 @@ enum CBORParser {
     }
 
     // MARK: Primitive reads
+    //
+    // Each read takes `item`, the offset of the head of the data item it is part of,
+    // so that an error points at the item rather than at the byte that was missing.
 
     @inline(__always)
-    private static func readByte(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt8 {
-        guard offset < span.count else { throw CBORError.unexpectedEnd }
+    private static func readByte(_ span: Span<UInt8>, _ offset: inout Int, item start: Int) throws -> UInt8 {
+        guard offset < span.count else { throw CBORError.unexpectedEnd(offset: start) }
         let byte = span[offset]
         offset += 1
         return byte
@@ -221,23 +240,24 @@ enum CBORParser {
     private static func readArgument(
         _ additional: UInt8,
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> UInt64 {
         switch additional {
         case 0..<24:
             return UInt64(additional)
         case 24:
-            return UInt64(try readByte(span, &offset))
+            return UInt64(try readByte(span, &offset, item: start))
         case 25:
-            return UInt64(try readUInt16(span, &offset))
+            return UInt64(try readUInt16(span, &offset, item: start))
         case 26:
-            return UInt64(try readUInt32(span, &offset))
+            return UInt64(try readUInt32(span, &offset, item: start))
         case 27:
-            return try readUInt64(span, &offset)
+            return try readUInt64(span, &offset, item: start)
         case 31:
-            throw CBORError.invalidIndefiniteLength
+            throw CBORError.invalidIndefiniteLength(offset: start)
         default: // 28, 29, 30
-            throw CBORError.reservedAdditionalInfo(additional)
+            throw CBORError.reservedAdditionalInfo(additional, offset: start)
         }
     }
 
@@ -245,35 +265,36 @@ enum CBORParser {
     private static func readCount(
         _ additional: UInt8,
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> Int {
-        guard let count = Int(exactly: try readArgument(additional, span, &offset)) else {
-            throw CBORError.unexpectedEnd
+        guard let count = Int(exactly: try readArgument(additional, span, &offset, item: start)) else {
+            throw CBORError.unexpectedEnd(offset: start)
         }
         return count
     }
 
     @inline(__always)
-    private static func readUInt16(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt16 {
-        let high = try readByte(span, &offset)
-        let low = try readByte(span, &offset)
+    private static func readUInt16(_ span: Span<UInt8>, _ offset: inout Int, item start: Int) throws -> UInt16 {
+        let high = try readByte(span, &offset, item: start)
+        let low = try readByte(span, &offset, item: start)
         return UInt16(high) << 8 | UInt16(low)
     }
 
     @inline(__always)
-    private static func readUInt32(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt32 {
+    private static func readUInt32(_ span: Span<UInt8>, _ offset: inout Int, item start: Int) throws -> UInt32 {
         var result: UInt32 = 0
         for _ in 0..<4 {
-            result = result << 8 | UInt32(try readByte(span, &offset))
+            result = result << 8 | UInt32(try readByte(span, &offset, item: start))
         }
         return result
     }
 
     @inline(__always)
-    private static func readUInt64(_ span: Span<UInt8>, _ offset: inout Int) throws -> UInt64 {
+    private static func readUInt64(_ span: Span<UInt8>, _ offset: inout Int, item start: Int) throws -> UInt64 {
         var result: UInt64 = 0
         for _ in 0..<8 {
-            result = result << 8 | UInt64(try readByte(span, &offset))
+            result = result << 8 | UInt64(try readByte(span, &offset, item: start))
         }
         return result
     }
@@ -282,11 +303,12 @@ enum CBORParser {
     private static func readBytes(
         _ length: UInt64,
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> [UInt8] {
         guard let count = Int(exactly: length),
               count <= span.count - offset else {
-            throw CBORError.unexpectedEnd
+            throw CBORError.unexpectedEnd(offset: start)
         }
         var bytes: [UInt8] = []
         bytes.reserveCapacity(count)
@@ -303,11 +325,12 @@ enum CBORParser {
     private static func readTextString(
         _ length: UInt64,
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> String {
-        let raw = try readBytes(length, span, &offset)
+        let raw = try readBytes(length, span, &offset, item: start)
         guard let string = validatedString(raw) else {
-            throw CBORError.invalidUTF8
+            throw CBORError.invalidUTF8(offset: start)
         }
         return string
     }
@@ -344,37 +367,41 @@ enum CBORParser {
 
     private static func readIndefiniteByteString(
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> CBOR {
         var bytes: [UInt8] = []
         while true {
-            let initialByte = try readByte(span, &offset)
+            let chunk = offset
+            let initialByte = try readByte(span, &offset, item: chunk)
             if initialByte == 0xff { break }
             guard initialByte >> 5 == 2, initialByte & 0x1f != 31 else {
-                throw CBORError.invalidIndefiniteLength
+                throw CBORError.invalidIndefiniteLength(offset: chunk)
             }
-            let length = try readArgument(initialByte & 0x1f, span, &offset)
-            bytes.append(contentsOf: try readBytes(length, span, &offset))
+            let length = try readArgument(initialByte & 0x1f, span, &offset, item: chunk)
+            bytes.append(contentsOf: try readBytes(length, span, &offset, item: chunk))
         }
         return .byteString(bytes)
     }
 
     private static func readIndefiniteTextString(
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> CBOR {
         var bytes: [UInt8] = []
         while true {
-            let initialByte = try readByte(span, &offset)
+            let chunk = offset
+            let initialByte = try readByte(span, &offset, item: chunk)
             if initialByte == 0xff { break }
             guard initialByte >> 5 == 3, initialByte & 0x1f != 31 else {
-                throw CBORError.invalidIndefiniteLength
+                throw CBORError.invalidIndefiniteLength(offset: chunk)
             }
-            let length = try readArgument(initialByte & 0x1f, span, &offset)
-            bytes.append(contentsOf: try readBytes(length, span, &offset))
+            let length = try readArgument(initialByte & 0x1f, span, &offset, item: chunk)
+            bytes.append(contentsOf: try readBytes(length, span, &offset, item: chunk))
         }
         guard let string = validatedString(bytes) else {
-            throw CBORError.invalidUTF8
+            throw CBORError.invalidUTF8(offset: start)
         }
         return .textString(string)
     }
@@ -384,7 +411,8 @@ enum CBORParser {
     private static func parseSimpleOrFloat(
         _ additional: UInt8,
         _ span: Span<UInt8>,
-        _ offset: inout Int
+        _ offset: inout Int,
+        item start: Int
     ) throws -> CBOR {
         switch additional {
         case 0..<20:
@@ -398,21 +426,21 @@ enum CBORParser {
         case 23:
             return .undefined
         case 24:
-            let value = try readByte(span, &offset)
+            let value = try readByte(span, &offset, item: start)
             // Simple values 0...31 must use the single-byte form, not 0xf8.
-            guard value >= 32 else { throw CBORError.reservedAdditionalInfo(24) }
+            guard value >= 32 else { throw CBORError.reservedAdditionalInfo(24, offset: start) }
             return .simple(CBORSimpleValue(unchecked: value))
         case 25:
-            return .half(bitPattern: try readUInt16(span, &offset))
+            return .half(bitPattern: try readUInt16(span, &offset, item: start))
         case 26:
-            return .float(Float(bitPattern: try readUInt32(span, &offset)))
+            return .float(Float(bitPattern: try readUInt32(span, &offset, item: start)))
         case 27:
-            return .double(Double(bitPattern: try readUInt64(span, &offset)))
+            return .double(Double(bitPattern: try readUInt64(span, &offset, item: start)))
         case 31:
             // A break stop code where a data item was expected.
-            throw CBORError.unexpectedBreak
+            throw CBORError.unexpectedBreak(offset: start)
         default: // 28, 29, 30
-            throw CBORError.reservedAdditionalInfo(additional)
+            throw CBORError.reservedAdditionalInfo(additional, offset: start)
         }
     }
 }

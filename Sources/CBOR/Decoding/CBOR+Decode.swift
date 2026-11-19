@@ -15,7 +15,7 @@ extension CBOR {
         var offset = 0
         let value = try CBORParser.parseItem(bytes, &offset, options: options)
         guard offset == bytes.count else {
-            throw CBORError.trailingData(remaining: bytes.count - offset)
+            throw CBORError.trailingData(remaining: bytes.count - offset, offset: offset)
         }
         return value
     }

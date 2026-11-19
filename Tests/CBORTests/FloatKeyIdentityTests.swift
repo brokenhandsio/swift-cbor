@@ -43,7 +43,7 @@ struct FloatKeyIdentityTests {
     @Test("A repeated NaN key is a duplicate key")
     func repeatedNaNKeyIsDuplicate() {
         // Same bit pattern, same key: rejected by default like any other repeat.
-        #expect(throws: CBORError.duplicateMapKey) {
+        #expect(throws: CBORError.duplicateMapKey(offset: 11)) {
             try CBOR.decode(twoNaNKeys)
         }
     }

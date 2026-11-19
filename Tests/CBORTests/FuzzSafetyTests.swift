@@ -61,9 +61,13 @@ struct FuzzSafetyTests {
         for _ in 0..<100_000 { nestedMaps += [0xa1, 0x00] } // map(1) with key 0, value = next
         nestedMaps.append(0x00)
 
-        let inputs: [[UInt8]] = [nestedArrays, nestedTags, nestedIndefinite, nestedMaps]
-        for input in inputs {
-            #expect(throws: CBORError.maxDepthExceeded(512)) {
+        // The first item too deep is the 513th level's: offset 513 for the
+        // one-byte levels, and the 513th map's key, at 1025, for maps.
+        let inputs: [([UInt8], Int)] = [
+            (nestedArrays, 513), (nestedTags, 513), (nestedIndefinite, 513), (nestedMaps, 1025),
+        ]
+        for (input, offset) in inputs {
+            #expect(throws: CBORError.maxDepthExceeded(limit: 512, offset: offset)) {
                 try CBOR.decode(input)
             }
         }

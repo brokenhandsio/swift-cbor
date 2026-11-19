@@ -68,6 +68,18 @@ let value = try CBOR.decode([0x83, 0x01, 0x02, 0x03])
 
 You can decode from a `[UInt8]`, an `ArraySlice<UInt8>`, or a `Span<UInt8>` directly.
 
+Malformed input throws a `CBORError` that says where the problem is, as a byte
+offset into the input:
+
+```swift
+do {
+    _ = try CBOR.decode([0x82, 0x01, 0x62, 0xff, 0xff])
+} catch let error as CBORError {
+    print(error)        // Invalid UTF-8 in the text string at offset 2
+    print(error.offset) // 2
+}
+```
+
 ### Encoding
 
 ```swift

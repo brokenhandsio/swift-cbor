@@ -36,7 +36,7 @@ struct SimpleValueTests {
 
     @Test("the two-byte form of 0–31 is rejected", arguments: UInt8(0)...31)
     func twoByteFormRejected(_ value: UInt8) {
-        #expect(throws: CBORError.reservedAdditionalInfo(24)) {
+        #expect(throws: CBORError.reservedAdditionalInfo(24, offset: 0)) {
             try CBOR.decode([0xf8, value])
         }
     }

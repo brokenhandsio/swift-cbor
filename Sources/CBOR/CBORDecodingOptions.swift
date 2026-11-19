@@ -7,7 +7,7 @@ public struct CBORDecodingOptions: Sendable {
     /// The maximum nesting depth to decode, inclusive.
     ///
     /// A top-level primitive has depth 0; each nested array, map or tag increases
-    /// the depth by one. Decoding throws ``CBORError/maxDepthExceeded(_:)`` when the
+    /// the depth by one. Decoding throws ``CBORError/maxDepthExceeded(limit:offset:)`` when the
     /// limit would be exceeded. This bounds stack usage on adversarial input.
     /// Defaults to `512`.
     ///
@@ -15,7 +15,7 @@ public struct CBORDecodingOptions: Sendable {
     /// stops at that ceiling regardless. See its documentation for why.
     public var maximumDepth: Int
 
-    /// Throw ``CBORError/duplicateMapKey`` if a map contains the same
+    /// Throw ``CBORError/duplicateMapKey(offset:)`` if a map contains the same
     /// key more than once. Defaults to `true`.
     ///
     /// RFC 8949 §5.6 says a map with a duplicate key is not valid CBOR, and
@@ -52,7 +52,7 @@ public struct CBORDecodingOptions: Sendable {
     /// which it is on, it refuses to build values it may be unable to destroy.
     ///
     /// 1024 leaves the default of 512 usable while staying inside the smaller
-    /// budget. Deeper input fails with ``CBORError/maxDepthExceeded(_:)``, which
+    /// budget. Deeper input fails with ``CBORError/maxDepthExceeded(limit:offset:)``, which
     /// is a normal error rather than a crash.
     public static let maximumSupportedDepth = 1024
 

@@ -31,11 +31,14 @@ struct MaximumDepthTests {
         }
     }
 
-    @Test("one level past the limit throws maxDepthExceeded")
+    @Test("one level past the limit throws maxDepthExceeded at the first item too deep")
     func pastLimit() {
         let options = CBORDecodingOptions(maximumDepth: 16)
-        for input in [nestedArrays(17), nestedTags(17), nestedMaps(17)] {
-            #expect(throws: CBORError.maxDepthExceeded(16)) {
+        // Arrays and tags are one byte a level, so the leaf at offset 17 is too
+        // deep. Maps are two (head and key), and the 17th map's key, at offset
+        // 33, is the first item at depth 17.
+        for (input, offset) in [(nestedArrays(17), 17), (nestedTags(17), 17), (nestedMaps(17), 33)] {
+            #expect(throws: CBORError.maxDepthExceeded(limit: 16, offset: offset)) {
                 try CBOR.decode(input, options: options)
             }
         }
@@ -49,7 +52,7 @@ struct MaximumDepthTests {
         #expect(throws: Never.self) { _ = try CBOR.decode([0x80], options: options) } // []
         #expect(throws: Never.self) { _ = try CBOR.decode([0xa0], options: options) } // {}
         // Any actual nesting is rejected.
-        #expect(throws: CBORError.maxDepthExceeded(0)) {
+        #expect(throws: CBORError.maxDepthExceeded(limit: 0, offset: 1)) {
             try CBOR.decode(nestedArrays(1), options: options)
         }
     }
@@ -58,7 +61,7 @@ struct MaximumDepthTests {
     func defaultLimit() {
         // 513-deep throws; the depth guard fires before any stack pressure builds
         // (the decoder is iterative, so this can never overflow the stack).
-        #expect(throws: CBORError.maxDepthExceeded(512)) {
+        #expect(throws: CBORError.maxDepthExceeded(limit: 512, offset: 513)) {
             try CBOR.decode(nestedArrays(513))
         }
     }
@@ -75,7 +78,9 @@ struct MaximumDepthTests {
             }
         }
         bytes.append(0x00)
-        #expect(throws: CBORError.maxDepthExceeded(16)) {
+        // Level 17 is the first too deep. Levels 0–16 take 22 bytes: 17 heads, plus
+        // a key for each of the five maps among them.
+        #expect(throws: CBORError.maxDepthExceeded(limit: 16, offset: 22)) {
             try CBOR.decode(bytes, options: CBORDecodingOptions(maximumDepth: 16))
         }
     }
