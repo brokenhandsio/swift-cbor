@@ -231,12 +231,24 @@ func keyRangeIsOrderedBefore(
     _ aStart: Int, _ aEnd: Int,
     _ bStart: Int, _ bEnd: Int
 ) -> Bool {
+    compareKeyRanges(buffer, aStart, aEnd, bStart, bEnd) < 0
+}
+
+/// The same ordering as ``keyRangeIsOrderedBefore(_:_:_:_:_:)`` as a three-way
+/// comparison: negative, zero or positive as range `a` sorts before, equal to, or
+/// after range `b`.
+@inline(__always)
+func compareKeyRanges(
+    _ buffer: [UInt8],
+    _ aStart: Int, _ aEnd: Int,
+    _ bStart: Int, _ bEnd: Int
+) -> Int {
     var a = aStart
     var b = bStart
     while a < aEnd, b < bEnd {
-        if buffer[a] != buffer[b] { return buffer[a] < buffer[b] }
+        if buffer[a] != buffer[b] { return buffer[a] < buffer[b] ? -1 : 1 }
         a += 1
         b += 1
     }
-    return (aEnd - aStart) < (bEnd - bStart)
+    return (aEnd - aStart) - (bEnd - bStart)
 }

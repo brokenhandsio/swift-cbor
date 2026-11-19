@@ -84,6 +84,10 @@ private func boxNode<T: Encodable>(
 /// Write a keyed container's entries as a CBOR map, sorted into RFC 8949 §4.2.1
 /// canonical order when deterministic. Keys are encoded once into a shared scratch
 /// buffer and sorted by byte range — no per-key allocation, no per-value buffering.
+///
+/// A key encoded more than once keeps only its last value, as with `JSONEncoder`.
+/// Writing every entry would produce a map with a duplicate key, which is not
+/// valid CBOR and which a strict decoder rejects.
 private func writeMap(
     _ entries: [(key: CBOR, node: EncodingNode)],
     to out: inout [UInt8],
@@ -91,12 +95,8 @@ private func writeMap(
 ) {
     // Keyed-container keys are always text-string scalars, so they can be written
     // with `appendScalarBytes` (no work stack).
-    appendTypedArgument(major: 5, UInt64(entries.count), to: &out)
     guard options.deterministic else {
-        for entry in entries {
-            entry.key.appendScalarBytes(to: &out)
-            entry.node.write(to: &out, options: options)
-        }
+        writeMapInInsertionOrder(entries, to: &out, options: options)
         return
     }
     var keyBytes: [UInt8] = []
@@ -107,10 +107,48 @@ private func writeMap(
         entry.key.appendScalarBytes(to: &keyBytes)
         ranges.append((start, keyBytes.count, index))
     }
-    ranges.sort { keyRangeIsOrderedBefore(keyBytes, $0.start, $0.end, $1.start, $1.end) }
+    // Repeats of a key sort next to each other, in the order they were written,
+    // so the write that wins is the last of its run.
+    ranges.sort {
+        let order = compareKeyRanges(keyBytes, $0.start, $0.end, $1.start, $1.end)
+        return order != 0 ? order < 0 : $0.index < $1.index
+    }
+    var kept = 0
+    for position in ranges.indices {
+        let range = ranges[position]
+        if position + 1 < ranges.count {
+            let next = ranges[position + 1]
+            if compareKeyRanges(keyBytes, range.start, range.end, next.start, next.end) == 0 {
+                continue // overwritten by a later write of the same key
+            }
+        }
+        ranges[kept] = range
+        kept += 1
+    }
+    ranges.removeLast(ranges.count - kept)
+
+    appendTypedArgument(major: 5, UInt64(ranges.count), to: &out)
     for range in ranges {
         out.append(contentsOf: keyBytes[range.start..<range.end])
         entries[range.index].node.write(to: &out, options: options)
+    }
+}
+
+/// `writeMap` without sorting: entries are written in the order they were encoded,
+/// still keeping only the last write of a repeated key.
+private func writeMapInInsertionOrder(
+    _ entries: [(key: CBOR, node: EncodingNode)],
+    to out: inout [UInt8],
+    options: CBOROptions
+) {
+    var lastWrite: [CBOR: Int] = .init(minimumCapacity: entries.count)
+    for (index, entry) in entries.enumerated() {
+        lastWrite[entry.key] = index
+    }
+    appendTypedArgument(major: 5, UInt64(lastWrite.count), to: &out)
+    for (index, entry) in entries.enumerated() where lastWrite[entry.key] == index {
+        entry.key.appendScalarBytes(to: &out)
+        entry.node.write(to: &out, options: options)
     }
 }
 
