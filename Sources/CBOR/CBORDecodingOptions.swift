@@ -1,5 +1,9 @@
-/// Options controlling CBOR decoding and encoding.
-public struct CBOROptions: Sendable {
+/// Options controlling how CBOR is decoded, by ``CBOR/decode(_:options:)-(Span<UInt8>,_)``,
+/// ``CBOR/decodeFirst(_:options:)-(Span<UInt8>,_)`` and ``CBORDecoder``.
+///
+/// Encoding takes no options: its output is always deterministic. See
+/// ``CBOR/encode()``.
+public struct CBORDecodingOptions: Sendable {
     /// The maximum nesting depth to decode, inclusive.
     ///
     /// A top-level primitive has depth 0; each nested array, map or tag increases
@@ -11,7 +15,7 @@ public struct CBOROptions: Sendable {
     /// stops at that ceiling regardless. See its documentation for why.
     public var maximumDepth: Int
 
-    /// When decoding, throw ``CBORError/duplicateMapKey`` if a map contains the same
+    /// Throw ``CBORError/duplicateMapKey`` if a map contains the same
     /// key more than once. Defaults to `true`.
     ///
     /// RFC 8949 §5.6 says a map with a duplicate key is not valid CBOR, and
@@ -53,5 +57,5 @@ public struct CBOROptions: Sendable {
     public static let maximumSupportedDepth = 1024
 
     /// The default options.
-    public static let `default` = CBOROptions()
+    public static let `default` = CBORDecodingOptions()
 }

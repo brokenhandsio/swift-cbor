@@ -16,7 +16,7 @@
 /// thread, but only around 1,800 on the 512 KB threads Swift concurrency uses.
 ///
 /// Decoding cannot produce such a value: it is capped at
-/// ``CBOROptions/maximumSupportedDepth``, and both ``CBOR/decode(_:options:)-(Span<UInt8>,_)``
+/// ``CBORDecodingOptions/maximumSupportedDepth``, and both ``CBOR/decode(_:options:)-(Span<UInt8>,_)``
 /// and ``CBORDecoder`` go through that cap. Nothing else in this library builds
 /// nested values either, so the limit is only reachable by writing a loop that
 /// deliberately nests one — which no real code does.

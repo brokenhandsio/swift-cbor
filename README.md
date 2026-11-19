@@ -137,18 +137,21 @@ let (value, consumed) = try CBOR.decodeFirst(buffer)
 let remainder = buffer[consumed...]
 ```
 
-### Options
+### Decoding options
 
 ```swift
-let options = CBOROptions(
+let options = CBORDecodingOptions(
     maximumDepth: 16,             // bound nesting on adversarial input (default 512)
     rejectDuplicateMapKeys: false // accept duplicate map keys, last wins (default true)
 )
 let value = try CBOR.decode(bytes, options: options)
+let reading = try CBORDecoder(options: options).decode(Reading.self, from: bytes)
 ```
 
-`maximumDepth` is bounded by `CBOROptions.maximumSupportedDepth` (1024). Raising
-`maximumDepth` above it has no effect — decoding still stops at the ceiling. That
+Encoding takes no options: its output is always deterministic.
+
+`maximumDepth` is bounded by `CBORDecodingOptions.maximumSupportedDepth` (1024).
+Raising `maximumDepth` above it has no effect — decoding still stops at the ceiling. That
 bound is not a preference, it is the thing that keeps the guarantee in
 **[Limits](#limits)** true whatever a caller passes.
 
@@ -226,8 +229,8 @@ high-water mark that moves with allocator behaviour and runner image.
 Like any Swift CBOR library built on a recursive value type, a decoded `CBOR` value is
 **deallocated recursively** — freeing a value nested many thousands of levels deep can
 exhaust the stack. Decoding and encoding themselves are fully iterative and never
-recurse on input nesting, and `CBOROptions.maximumDepth` (default 512) bounds how deep
-a decoded value can be, so values decoded from untrusted input free safely on ordinary
+recurse on input nesting, and `CBORDecodingOptions.maximumDepth` (default 512) bounds
+how deep a decoded value can be, so values decoded from untrusted input free safely on ordinary
 stacks. Lower `maximumDepth` if you decode on threads with unusually small stacks.
 
 Raising it does not remove the bound: `maximumSupportedDepth` (1024) is a hard ceiling

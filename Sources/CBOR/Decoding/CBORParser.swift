@@ -5,8 +5,8 @@
 /// how deeply the input nests. Decoding hostile, deeply nested input fails with
 /// ``CBORError/maxDepthExceeded(_:)`` instead of trapping.
 ///
-/// Depth is capped at ``CBOROptions/maximumSupportedDepth`` regardless of what
-/// ``CBOROptions/maximumDepth`` requests. Parsing itself would happily go deeper —
+/// Depth is capped at ``CBORDecodingOptions/maximumSupportedDepth`` regardless of what
+/// ``CBORDecodingOptions/maximumDepth`` requests. Parsing itself would happily go deeper —
 /// its stack is on the heap — but the resulting value is a recursive tree that the
 /// Swift runtime tears down recursively when it is released, and that recursion is
 /// not something this library can intercept. Refusing to build such a value is the
@@ -72,12 +72,12 @@ enum CBORParser {
     static func parseItem(
         _ span: Span<UInt8>,
         _ offset: inout Int,
-        options: CBOROptions
+        options: CBORDecodingOptions
     ) throws -> CBOR {
         // Clamped, not trusted: a value nested deeper than this decodes fine and
         // then overflows the stack when the runtime releases it. See
-        // `CBOROptions.maximumSupportedDepth`.
-        let maxDepth = min(options.maximumDepth, CBOROptions.maximumSupportedDepth)
+        // `CBORDecodingOptions.maximumSupportedDepth`.
+        let maxDepth = min(options.maximumDepth, CBORDecodingOptions.maximumSupportedDepth)
         let rejectDuplicates = options.rejectDuplicateMapKeys
         var stack: [Frame] = []
 

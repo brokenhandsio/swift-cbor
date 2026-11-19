@@ -38,7 +38,7 @@ let reading = try CBORDecoder().decode(Reading.self, from: encoded)
 
 - ``CBOREncoder``
 - ``CBORDecoder``
-- ``CBOROptions``
+- ``CBORDecodingOptions``
 
 ### Errors
 

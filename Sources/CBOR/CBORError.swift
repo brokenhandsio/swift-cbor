@@ -17,7 +17,7 @@ public enum CBORError: Error, Hashable, Sendable {
     /// A text string did not contain valid UTF-8.
     case invalidUTF8
 
-    /// Decoding exceeded ``CBOROptions/maximumDepth``. The associated value is the
+    /// Decoding exceeded ``CBORDecodingOptions/maximumDepth``. The associated value is the
     /// limit that was hit.
     case maxDepthExceeded(Int)
 
@@ -26,6 +26,6 @@ public enum CBORError: Error, Hashable, Sendable {
     case trailingData(remaining: Int)
 
     /// A map contained a duplicate key. Reported unless
-    /// ``CBOROptions/rejectDuplicateMapKeys`` is turned off.
+    /// ``CBORDecodingOptions/rejectDuplicateMapKeys`` is turned off.
     case duplicateMapKey
 }

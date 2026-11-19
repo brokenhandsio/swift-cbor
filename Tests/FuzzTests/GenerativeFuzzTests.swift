@@ -21,7 +21,7 @@ private func iterations(_ fallback: Int) -> Int {
 // accept it so the round trip still covers maps (the last value wins, and
 // encoding writes one entry per key). Rejection has its own tests, and the
 // libFuzzer targets decode with default options.
-private let decodeOptions = CBOROptions(maximumDepth: 32, rejectDuplicateMapKeys: false)
+private let decodeOptions = CBORDecodingOptions(maximumDepth: 32, rejectDuplicateMapKeys: false)
 
 private struct Probe: Codable {
     var a: Int?

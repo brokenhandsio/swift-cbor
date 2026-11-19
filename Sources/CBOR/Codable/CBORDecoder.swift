@@ -18,9 +18,9 @@ import Foundation
 /// integer-keyed maps such as COSE keys.
 public struct CBORDecoder: Sendable {
     /// Options applied when reading the CBOR bytes.
-    public var options: CBOROptions
+    public var options: CBORDecodingOptions
 
-    public init(options: CBOROptions = .default) {
+    public init(options: CBORDecodingOptions = .default) {
         self.options = options
     }
 
@@ -52,7 +52,7 @@ private enum PathComponent {
 
 private final class _CBORDecoder: Decoder {
     let cbor: CBOR
-    let options: CBOROptions
+    let options: CBORDecodingOptions
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     // The coding path is held as a link to the parent decoder plus this decoder's
@@ -63,7 +63,7 @@ private final class _CBORDecoder: Decoder {
     private let parent: _CBORDecoder?
     private let component: PathComponent
 
-    init(cbor: CBOR, options: CBOROptions, parent: _CBORDecoder? = nil, component: PathComponent = .root) {
+    init(cbor: CBOR, options: CBORDecodingOptions, parent: _CBORDecoder? = nil, component: PathComponent = .root) {
         self.cbor = cbor
         self.options = options
         self.parent = parent

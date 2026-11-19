@@ -67,13 +67,13 @@ struct MalformedInputTests {
     @Test("depth limit is enforced")
     func depthLimit() {
         // [[[0]]] is depth 3; allow only 2.
-        let options = CBOROptions(maximumDepth: 2)
+        let options = CBORDecodingOptions(maximumDepth: 2)
         #expect(throws: CBORError.maxDepthExceeded(2)) {
             try CBOR.decode(bytes(fromHex: "81818100"), options: options)
         }
         // At the limit it succeeds.
         #expect(throws: Never.self) {
-            _ = try CBOR.decode(bytes(fromHex: "818100"), options: CBOROptions(maximumDepth: 2))
+            _ = try CBOR.decode(bytes(fromHex: "818100"), options: CBORDecodingOptions(maximumDepth: 2))
         }
     }
 
@@ -106,7 +106,7 @@ struct MalformedInputTests {
 
     @Test("duplicate map keys are accepted when allowed, and the last value wins")
     func duplicateKeysAllowed() throws {
-        let options = CBOROptions(rejectDuplicateMapKeys: false)
+        let options = CBORDecodingOptions(rejectDuplicateMapKeys: false)
         #expect(try CBOR.decode(bytes(fromHex: "a201020103"), options: options) == [1: 3])
         #expect(try CBOR.decode(bytes(fromHex: "bf01020103ff"), options: options) == [1: 3])
     }
@@ -126,7 +126,7 @@ struct MalformedInputTests {
         #expect(throws: CBORError.duplicateMapKey) {
             try CBORDecoder().decode(Point.self, from: input)
         }
-        let lenient = CBORDecoder(options: CBOROptions(rejectDuplicateMapKeys: false))
+        let lenient = CBORDecoder(options: CBORDecodingOptions(rejectDuplicateMapKeys: false))
         #expect(try lenient.decode(Point.self, from: input).x == 2)
     }
 }

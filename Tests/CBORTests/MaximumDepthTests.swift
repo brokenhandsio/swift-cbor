@@ -23,7 +23,7 @@ private func nestedMaps(_ depth: Int) -> [UInt8] {
 struct MaximumDepthTests {
     @Test("a value nested at exactly the limit decodes")
     func atLimit() {
-        let options = CBOROptions(maximumDepth: 16)
+        let options = CBORDecodingOptions(maximumDepth: 16)
         for input in [nestedArrays(16), nestedTags(16), nestedMaps(16)] {
             #expect(throws: Never.self) {
                 _ = try CBOR.decode(input, options: options)
@@ -33,7 +33,7 @@ struct MaximumDepthTests {
 
     @Test("one level past the limit throws maxDepthExceeded")
     func pastLimit() {
-        let options = CBOROptions(maximumDepth: 16)
+        let options = CBORDecodingOptions(maximumDepth: 16)
         for input in [nestedArrays(17), nestedTags(17), nestedMaps(17)] {
             #expect(throws: CBORError.maxDepthExceeded(16)) {
                 try CBOR.decode(input, options: options)
@@ -43,7 +43,7 @@ struct MaximumDepthTests {
 
     @Test("maximumDepth 0 allows only unnested top-level items")
     func zeroDepth() {
-        let options = CBOROptions(maximumDepth: 0)
+        let options = CBORDecodingOptions(maximumDepth: 0)
         // A primitive and an empty container involve no nesting, so they are allowed.
         #expect(throws: Never.self) { _ = try CBOR.decode([0x00], options: options) }
         #expect(throws: Never.self) { _ = try CBOR.decode([0x80], options: options) } // []
@@ -76,7 +76,7 @@ struct MaximumDepthTests {
         }
         bytes.append(0x00)
         #expect(throws: CBORError.maxDepthExceeded(16)) {
-            try CBOR.decode(bytes, options: CBOROptions(maximumDepth: 16))
+            try CBOR.decode(bytes, options: CBORDecodingOptions(maximumDepth: 16))
         }
     }
 }

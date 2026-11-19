@@ -52,7 +52,7 @@ extension CBOR {
     ///
     /// Native recursion here would be a stack overflow waiting to happen: a
     /// value nested `n` deep costs `n` frames, and `n` is attacker-controlled
-    /// up to `CBOROptions.maximumDepth`, which callers may raise. The parser
+    /// up to `CBORDecodingOptions.maximumDepth`, which callers may raise. The parser
     /// and encoder avoid recursion for the same reason, so comparison should
     /// not be the one place that reintroduces the limit.
     private static func deepEqual(_ lhs: CBOR, _ rhs: CBOR) -> Bool {
@@ -94,7 +94,7 @@ extension CBOR {
     ///
     /// Synthesized hashing recursed once per level of nesting and overflowed the
     /// stack somewhere between depth 512 and 1000 — uncomfortably close to the
-    /// default `CBOROptions.maximumDepth` of 512, and reachable from decoded
+    /// default `CBORDecodingOptions.maximumDepth` of 512, and reachable from decoded
     /// input the moment a caller raises that limit, because the parser stores
     /// map keys with `pairs[key] = value`.
     ///

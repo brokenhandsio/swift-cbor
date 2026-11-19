@@ -95,7 +95,7 @@ struct FuzzSafetyTests {
         var value: CBOR = .unsignedInt(0)
         for _ in 0..<500 { value = .array([value]) }
         let encoded = value.encode()
-        let decoded = try CBOR.decode(encoded, options: CBOROptions(maximumDepth: 1024))
+        let decoded = try CBOR.decode(encoded, options: CBORDecodingOptions(maximumDepth: 1024))
         #expect(decoded == value)
     }
 

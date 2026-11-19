@@ -18,7 +18,7 @@ private let twoNaNKeys: [UInt8] = [
 ]
 
 /// The collapse tests need the map to decode, so they allow the repeated key.
-private let allowDuplicates = CBOROptions(rejectDuplicateMapKeys: false)
+private let allowDuplicates = CBORDecodingOptions(rejectDuplicateMapKeys: false)
 
 @Suite("Float key identity")
 struct FloatKeyIdentityTests {

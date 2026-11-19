@@ -15,18 +15,16 @@ extension CBOR {
     /// recursion, so encoding a deeply nested value uses O(1) native stack and
     /// cannot overflow it.
     ///
-    /// - Parameter options: Encoding options. None of the current ``CBOROptions``
-    ///   change the output; they all apply to decoding.
     /// - Returns: The encoded bytes.
-    public func encode(options: CBOROptions = .default) -> [UInt8] {
+    public func encode() -> [UInt8] {
         var out: [UInt8] = []
         out.reserveCapacity(16)
-        appendEncoding(to: &out, options: options)
+        appendEncoding(to: &out)
         return out
     }
 
     /// Append this item's encoding to an existing buffer, iteratively.
-    func appendEncoding(to out: inout [UInt8], options: CBOROptions) {
+    func appendEncoding(to out: inout [UInt8]) {
         // The work stack only grows when a nested container is encountered; a flat
         // value (or a scalar) never allocates it — runs of scalars are written inline.
         var stack: [EncodeTask] = []
@@ -34,11 +32,11 @@ extension CBOR {
         while true {
             switch task {
             case .value(let cbor):
-                emit(cbor, to: &out, stack: &stack, options: options)
+                emit(cbor, to: &out, stack: &stack)
             case .arrayElements(let elements, let index):
-                emitArray(elements, from: index, to: &out, stack: &stack, options: options)
+                emitArray(elements, from: index, to: &out, stack: &stack)
             case .mapEntries(let keyBytes, let ranges, let index):
-                emitMap(keyBytes, ranges, from: index, to: &out, stack: &stack, options: options)
+                emitMap(keyBytes, ranges, from: index, to: &out, stack: &stack)
             }
             guard let next = stack.popLast() else { break }
             task = next
@@ -105,14 +103,14 @@ private enum EncodeTask {
     case mapEntries([UInt8], [(start: Int, end: Int, value: CBOR)], Int)
 }
 
-private func emit(_ cbor: CBOR, to out: inout [UInt8], stack: inout [EncodeTask], options: CBOROptions) {
+private func emit(_ cbor: CBOR, to out: inout [UInt8], stack: inout [EncodeTask]) {
     switch cbor {
     case .array(let elements):
         appendTypedArgument(major: 4, UInt64(elements.count), to: &out)
-        emitArray(elements, from: 0, to: &out, stack: &stack, options: options)
+        emitArray(elements, from: 0, to: &out, stack: &stack)
     case .map(let entries):
         appendTypedArgument(major: 5, UInt64(entries.count), to: &out)
-        emitMapValue(entries, to: &out, stack: &stack, options: options)
+        emitMapValue(entries, to: &out, stack: &stack)
     case .tagged(let tag, let item):
         appendTypedArgument(major: 6, tag.rawValue, to: &out)
         stack.append(.value(item))
@@ -125,7 +123,7 @@ private func emit(_ cbor: CBOR, to out: inout [UInt8], stack: inout [EncodeTask]
 /// the remainder is deferred to the work stack.
 private func emitArray(
     _ elements: [CBOR], from start: Int,
-    to out: inout [UInt8], stack: inout [EncodeTask], options: CBOROptions
+    to out: inout [UInt8], stack: inout [EncodeTask]
 ) {
     var index = start
     while index < elements.count {
@@ -144,7 +142,7 @@ private func emitArray(
 /// Encode a map's keys into one scratch buffer, sort them, then write the entries.
 private func emitMapValue(
     _ entries: [CBOR: CBOR],
-    to out: inout [UInt8], stack: inout [EncodeTask], options: CBOROptions
+    to out: inout [UInt8], stack: inout [EncodeTask]
 ) {
     guard !entries.isEmpty else { return }
     var keyBytes: [UInt8] = []
@@ -155,20 +153,20 @@ private func emitMapValue(
         if key.isScalar {
             key.appendScalarBytes(to: &keyBytes)
         } else {
-            key.appendEncoding(to: &keyBytes, options: options)
+            key.appendEncoding(to: &keyBytes)
         }
         ranges.append((start, keyBytes.count, value))
     }
     // RFC 8949 §4.2.1: bytewise lexicographic order of the encoded keys. `entries`
     // is a `Dictionary`, so without sorting the order would change between runs.
     ranges.sort { keyRangeIsOrderedBefore(keyBytes, $0.start, $0.end, $1.start, $1.end) }
-    emitMap(keyBytes, ranges, from: 0, to: &out, stack: &stack, options: options)
+    emitMap(keyBytes, ranges, from: 0, to: &out, stack: &stack)
 }
 
 /// Write map entries inline until a nested value is reached, deferring the rest.
 private func emitMap(
     _ keyBytes: [UInt8], _ ranges: [(start: Int, end: Int, value: CBOR)], from start: Int,
-    to out: inout [UInt8], stack: inout [EncodeTask], options: CBOROptions
+    to out: inout [UInt8], stack: inout [EncodeTask]
 ) {
     var index = start
     while index < ranges.count {
