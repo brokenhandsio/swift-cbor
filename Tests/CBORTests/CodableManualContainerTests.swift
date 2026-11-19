@@ -188,12 +188,11 @@ struct CodableManualContainerTests {
         #expect(try CBORDecoder().decode(ManualContainers.self, from: bytes) == ManualContainers.sample)
     }
 
-    @Test("hand-written containers are a fixed point under deterministic encoding")
+    @Test("hand-written containers are a fixed point")
     func manualContainersFixedPoint() throws {
-        let options = CBOROptions(deterministic: true)
-        let encoder = CBOREncoder(options: options)
+        let encoder = CBOREncoder()
         let once = try encoder.encode(ManualContainers.sample)
-        let decoded = try CBORDecoder(options: options).decode(ManualContainers.self, from: once)
+        let decoded = try CBORDecoder().decode(ManualContainers.self, from: once)
         #expect(try encoder.encode(decoded) == once)
     }
 }

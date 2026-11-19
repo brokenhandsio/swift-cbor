@@ -54,7 +54,8 @@ public enum CBOR: Sendable, Hashable {
     /// A map of key/value pairs (major type 5).
     ///
     /// Modeled as a Swift dictionary: lookups are O(1) and duplicate keys are not
-    /// representable. Encoding emits keys in deterministic (RFC 8949 §4.2) order.
+    /// representable. Encoding always sorts the keys (RFC 8949 §4.2.1), so a map
+    /// encodes to the same bytes whatever order its entries were added in.
     case map([CBOR: CBOR])
 
     /// A tagged data item (major type 6): a ``CBORTag`` annotating a nested item.

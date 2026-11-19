@@ -13,8 +13,9 @@ Binary Object Representation, RFC 8949) library for Swift.
 - **Complete RFC 8949 support.** Every example in RFC 8949 Appendix A round-trips,
   including tags, indefinite-length items, half/single/double floats, and the full
   ±2⁶⁴ integer range.
-- **Deterministic encoding.** Shortest-form integers and canonically ordered map
-  keys (RFC 8949 §4.2) by default.
+- **Deterministic encoding.** The same value always encodes to the same bytes:
+  shortest-form integers, definite lengths and sorted map keys (RFC 8949 §4.2.1).
+  Floats keep the width they were given rather than being narrowed.
 - **Fast and lean.** Benchmarked against other Swift CBOR libraries, with fewer
   allocations and lower instruction counts across decode and encode.
 - **Two ways to use it.** Work with the `CBOR` value model directly, or bridge any
@@ -72,7 +73,7 @@ You can decode from a `[UInt8]`, an `ArraySlice<UInt8>`, or a `Span<UInt8>` dire
 ```swift
 let item: CBOR = ["temperature": 21, "unit": "C"]
 let bytes = item.encode()
-// Map keys are emitted in RFC 8949 deterministic order.
+// Map keys are always sorted (RFC 8949 §4.2.1), so the bytes are stable.
 ```
 
 ### Building and reading values
@@ -122,8 +123,8 @@ let bytes = try CBOREncoder().encode(Reading(sensor: "abc", value: 1.5, ok: true
 let reading = try CBORDecoder().decode(Reading.self, from: bytes)
 ```
 
-Swift structs encode to CBOR maps keyed by their property names, in deterministic
-key order. With the `FoundationSupport` trait enabled (the default), `Data`
+Swift structs encode to CBOR maps keyed by their property names, with the keys
+sorted. With the `FoundationSupport` trait enabled (the default), `Data`
 properties encode as CBOR byte strings.
 
 ### Decoding an embedded item
@@ -145,8 +146,6 @@ let options = CBOROptions(
 )
 let value = try CBOR.decode(bytes, options: options)
 ```
-
-`CBOROptions` also controls `deterministic` encoding, which is on by default.
 
 `maximumDepth` is bounded by `CBOROptions.maximumSupportedDepth` (1024). Raising
 `maximumDepth` above it has no effect — decoding still stops at the ceiling. That

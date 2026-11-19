@@ -49,14 +49,11 @@ let fuzzTargets: @Sendable () -> Void = {
     // certainly fill with them. And comparing bytes tests the encoder as well
     // as the decoder, rather than only asserting the decoder is self-consistent.
     FuzzTarget.bytes("CBORCodable") { bytes in
-        // Deterministic, because the fixed point genuinely does not hold
-        // without it: map keys are otherwise emitted in `Dictionary` order,
-        // which differs between two separately decoded values, so `lookup`
-        // alone can legitimately encode two ways. Asserting it unconditionally
-        // would report the harness's own assumption as a library bug.
-        let options = CBOROptions(deterministic: true)
-        let decoder = CBORDecoder(options: options)
-        let encoder = CBOREncoder(options: options)
+        // The fixed point relies on map keys always being sorted: `lookup` is a
+        // dictionary, whose iteration order differs between two separately
+        // decoded values.
+        let decoder = CBORDecoder()
+        let encoder = CBOREncoder()
 
         // Most inputs are not a valid `Everything`; that rejection is a normal
         // thrown error and not interesting.
@@ -69,7 +66,7 @@ let fuzzTargets: @Sendable () -> Void = {
             fatalError("re-encoding a decoded value produced bytes that no longer decode")
         }
         guard let twice = try? encoder.encode(again), twice == once else {
-            fatalError("deterministic Codable encoding is not a fixed point")
+            fatalError("Codable encoding is not a fixed point")
         }
     }
 }

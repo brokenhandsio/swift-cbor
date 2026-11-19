@@ -9,9 +9,9 @@ swift-cbor decodes and encodes CBOR through a simple value model, ``CBOR``, and 
 bridges any `Codable` type via ``CBOREncoder`` and ``CBORDecoder``.
 
 Decoding reads through `Span<UInt8>` using only bounds-checked access, so the library
-contains no `unsafe` code and builds under strict memory safety. Encoding is
-deterministic by default (shortest-form integers and canonically ordered map keys, per
-RFC 8949 §4.2).
+contains no `unsafe` code and builds under strict memory safety. Encoding is always
+deterministic: shortest-form integers, definite lengths and sorted map keys, per
+RFC 8949 §4.2.1. Floats keep the width they were given.
 
 ```swift
 import CBOR

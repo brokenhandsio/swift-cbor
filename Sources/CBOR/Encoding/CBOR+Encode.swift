@@ -1,15 +1,22 @@
 extension CBOR {
     /// Encode this data item to its CBOR byte representation.
     ///
-    /// Encoding never fails: every `CBOR` value has a byte representation. When
-    /// `options.deterministic` is set (the default), integers use their shortest
-    /// form and map keys are emitted in RFC 8949 §4.2 canonical order.
+    /// Encoding never fails: every `CBOR` value has a byte representation.
+    ///
+    /// The output is deterministic: the same value always encodes to the same
+    /// bytes. Integers, lengths and tags use their shortest form, lengths are always
+    /// definite, and map keys are sorted into bytewise lexicographic order of their
+    /// encodings (RFC 8949 §4.2.1). Floats keep the width of their case
+    /// (``CBOR/half(bitPattern:)``, ``CBOR/float(_:)`` or ``CBOR/double(_:)``) rather
+    /// than being narrowed, so a value that §4.2.1 would shorten, such as
+    /// `.double(1.5)`, is written at its declared width.
     ///
     /// Nested containers are walked with an explicit work stack rather than native
     /// recursion, so encoding a deeply nested value uses O(1) native stack and
     /// cannot overflow it.
     ///
-    /// - Parameter options: Encoding options.
+    /// - Parameter options: Encoding options. None of the current ``CBOROptions``
+    ///   change the output; they all apply to decoding.
     /// - Returns: The encoded bytes.
     public func encode(options: CBOROptions = .default) -> [UInt8] {
         var out: [UInt8] = []
@@ -134,8 +141,7 @@ private func emitArray(
     }
 }
 
-/// Encode a map's keys into one scratch buffer, sort (when deterministic), then
-/// write the entries.
+/// Encode a map's keys into one scratch buffer, sort them, then write the entries.
 private func emitMapValue(
     _ entries: [CBOR: CBOR],
     to out: inout [UInt8], stack: inout [EncodeTask], options: CBOROptions
@@ -153,10 +159,9 @@ private func emitMapValue(
         }
         ranges.append((start, keyBytes.count, value))
     }
-    if options.deterministic {
-        // RFC 8949 §4.2.1: bytewise lexicographic order of the encoded keys.
-        ranges.sort { keyRangeIsOrderedBefore(keyBytes, $0.start, $0.end, $1.start, $1.end) }
-    }
+    // RFC 8949 §4.2.1: bytewise lexicographic order of the encoded keys. `entries`
+    // is a `Dictionary`, so without sorting the order would change between runs.
+    ranges.sort { keyRangeIsOrderedBefore(keyBytes, $0.start, $0.end, $1.start, $1.end) }
     emitMap(keyBytes, ranges, from: 0, to: &out, stack: &stack, options: options)
 }
 

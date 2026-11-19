@@ -11,8 +11,12 @@ import Foundation
 /// ```swift
 /// let bytes = try CBOREncoder().encode(myValue)
 /// ```
+///
+/// Output is deterministic in the same way as ``CBOR/encode(options:)``: map keys
+/// are sorted, so the same value always encodes to the same bytes.
 public struct CBOREncoder: Sendable {
-    /// Options applied when producing the CBOR bytes.
+    /// Options applied when producing the CBOR bytes. None of the current
+    /// ``CBOROptions`` change the output; they all apply to decoding.
     public var options: CBOROptions
 
     public init(options: CBOROptions = .default) {
@@ -82,7 +86,7 @@ private func boxNode<T: Encodable>(
 }
 
 /// Write a keyed container's entries as a CBOR map, sorted into RFC 8949 §4.2.1
-/// canonical order when deterministic. Keys are encoded once into a shared scratch
+/// canonical order. Keys are encoded once into a shared scratch
 /// buffer and sorted by byte range — no per-key allocation, no per-value buffering.
 ///
 /// A key encoded more than once keeps only its last value, as with `JSONEncoder`.
@@ -95,10 +99,6 @@ private func writeMap(
 ) {
     // Keyed-container keys are always text-string scalars, so they can be written
     // with `appendScalarBytes` (no work stack).
-    guard options.deterministic else {
-        writeMapInInsertionOrder(entries, to: &out, options: options)
-        return
-    }
     var keyBytes: [UInt8] = []
     var ranges: [(start: Int, end: Int, index: Int)] = []
     ranges.reserveCapacity(entries.count)
@@ -131,24 +131,6 @@ private func writeMap(
     for range in ranges {
         out.append(contentsOf: keyBytes[range.start..<range.end])
         entries[range.index].node.write(to: &out, options: options)
-    }
-}
-
-/// `writeMap` without sorting: entries are written in the order they were encoded,
-/// still keeping only the last write of a repeated key.
-private func writeMapInInsertionOrder(
-    _ entries: [(key: CBOR, node: EncodingNode)],
-    to out: inout [UInt8],
-    options: CBOROptions
-) {
-    var lastWrite: [CBOR: Int] = .init(minimumCapacity: entries.count)
-    for (index, entry) in entries.enumerated() {
-        lastWrite[entry.key] = index
-    }
-    appendTypedArgument(major: 5, UInt64(lastWrite.count), to: &out)
-    for (index, entry) in entries.enumerated() where lastWrite[entry.key] == index {
-        entry.key.appendScalarBytes(to: &out)
-        entry.node.write(to: &out, options: options)
     }
 }
 

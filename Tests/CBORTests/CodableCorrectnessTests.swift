@@ -79,15 +79,13 @@ private func decodingError(_ body: () throws -> Void) -> (any Error)? {
 struct CodableCorrectnessTests {
     // MARK: Repeated keys
 
-    @Test("a key encoded twice keeps its last value", arguments: [true, false])
-    func repeatedKeyLastWriteWins(deterministic: Bool) throws {
-        let bytes = try CBOREncoder(options: .init(deterministic: deterministic)).encode(RepeatedKey())
+    @Test("a key encoded twice keeps its last value")
+    func repeatedKeyLastWriteWins() throws {
+        let bytes = try CBOREncoder().encode(RepeatedKey())
         // Exactly one entry per key — strict decoding would reject a duplicate.
         let decoded = try CBOR.decode(bytes, options: .init(rejectDuplicateMapKeys: true))
         #expect(decoded == ["a": 1, "b": 2])
-        if deterministic {
-            #expect(hexString(bytes) == "a2616101616202") // {"a": 1, "b": 2}, sorted
-        }
+        #expect(hexString(bytes) == "a2616101616202") // {"a": 1, "b": 2}, sorted
     }
 
     @Test("a nested container opened twice keeps the last one")
