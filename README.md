@@ -64,7 +64,12 @@ import CBOR
 
 let value = try CBOR.decode([0x83, 0x01, 0x02, 0x03])
 // value == .array([.unsignedInt(1), .unsignedInt(2), .unsignedInt(3)])
+print(value) // [1, 2, 3]
 ```
+
+Values print in CBOR diagnostic notation (RFC 8949 §8), such as
+`{1: 2, "at": 1(1363896240), "id": h'01ff'}`, with map keys in their encoded
+order so the output is stable.
 
 You can decode from a `[UInt8]`, an `ArraySlice<UInt8>`, or a `Span<UInt8>` directly.
 

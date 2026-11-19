@@ -9,6 +9,7 @@
 /// well-formed encoding at all (RFC 8949 §3.3). Ruling both out means every
 /// `CBORSimpleValue` encodes exactly one way and decodes back to itself.
 public struct CBORSimpleValue: RawRepresentable, Sendable, Hashable {
+    /// The simple value's number: 0–19 or 32–255.
     public let rawValue: UInt8
 
     /// Create a simple value, or return `nil` for 20–31.
@@ -49,5 +50,6 @@ extension CBORSimpleValue: ExpressibleByIntegerLiteral {
 }
 
 extension CBORSimpleValue: CustomStringConvertible {
+    /// The simple value's number, such as `16`.
     public var description: String { String(rawValue) }
 }

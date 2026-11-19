@@ -28,6 +28,12 @@ public struct CBORDecodingOptions: Sendable {
     /// Set this to `false` to accept such maps; the last value for a key then wins.
     public var rejectDuplicateMapKeys: Bool
 
+    /// Create decoding options.
+    ///
+    /// - Parameters:
+    ///   - maximumDepth: The deepest nesting to decode. See ``maximumDepth``.
+    ///   - rejectDuplicateMapKeys: Whether a map that repeats a key is an error.
+    ///     See ``rejectDuplicateMapKeys``.
     public init(
         maximumDepth: Int = 512,
         rejectDuplicateMapKeys: Bool = true

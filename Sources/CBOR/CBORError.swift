@@ -57,6 +57,7 @@ public enum CBORError: Error, Hashable, Sendable {
 }
 
 extension CBORError: CustomStringConvertible {
+    /// The problem and where it is, such as "Duplicate map key at offset 4".
     public var description: String {
         switch self {
         case .unexpectedEnd(let offset):

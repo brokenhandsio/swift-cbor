@@ -25,6 +25,10 @@ public struct CBORDecoder: Sendable {
     /// Options applied when reading the CBOR bytes.
     public var options: CBORDecodingOptions
 
+    /// Create a decoder.
+    ///
+    /// - Parameter options: How to read the CBOR bytes: the depth limit and
+    ///   whether duplicate map keys are an error.
     public init(options: CBORDecodingOptions = .default) {
         self.options = options
     }
@@ -180,8 +184,30 @@ private func epochSeconds(_ cbor: CBOR) -> Double? {
 private func typeMismatch(_ type: Any.Type, _ cbor: CBOR, _ codingPath: [any CodingKey]) -> DecodingError {
     DecodingError.typeMismatch(type, DecodingError.Context(
         codingPath: codingPath,
-        debugDescription: "Expected to decode \(type) but found \(cbor) instead."
+        debugDescription: "Expected to decode \(type) but found \(kind(of: cbor)) instead."
     ))
+}
+
+/// What kind of item `cbor` is, for an error message. The value itself is left
+/// out, as `JSONDecoder` leaves it out: it can be large, and it comes from the
+/// input, so it doesn't belong in logs.
+private func kind(of cbor: CBOR) -> String {
+    switch cbor {
+    case .unsignedInt: "an unsigned integer"
+    case .negativeInt: "a negative integer"
+    case .byteString: "a byte string"
+    case .textString: "a text string"
+    case .array: "an array"
+    case .map: "a map"
+    case .tagged(let tag, _): "an item with tag \(tag.rawValue)"
+    case .simple: "a simple value"
+    case .bool: "a Boolean"
+    case .null: "null"
+    case .undefined: "undefined"
+    case .half: "a half-precision float"
+    case .float: "a single-precision float"
+    case .double: "a double-precision float"
+    }
 }
 
 private func outOfRange(_ type: Any.Type, _ codingPath: [any CodingKey]) -> DecodingError {

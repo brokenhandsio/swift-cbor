@@ -2,6 +2,7 @@
 // e.g. `let item: CBOR = ["a": 1, "b": [2, 3]]`.
 
 extension CBOR: ExpressibleByNilLiteral {
+    /// `nil` is ``null``.
     @inlinable
     public init(nilLiteral: ()) {
         self = .null
@@ -9,6 +10,11 @@ extension CBOR: ExpressibleByNilLiteral {
 }
 
 extension CBOR: ExpressibleByIntegerLiteral {
+    /// An integer literal is ``unsignedInt(_:)`` when it is zero or more, and
+    /// ``negativeInt(_:)`` otherwise.
+    ///
+    /// Literals are limited to the `Int64` range. Use the cases directly for the
+    /// rest of CBOR's integer range, which runs from -2⁶⁴ to 2⁶⁴ - 1.
     @inlinable
     public init(integerLiteral value: Int64) {
         if value < 0 {
@@ -23,6 +29,7 @@ extension CBOR: ExpressibleByIntegerLiteral {
 }
 
 extension CBOR: ExpressibleByStringLiteral {
+    /// A string literal is a ``textString(_:)``.
     @inlinable
     public init(stringLiteral value: String) {
         self = .textString(value)
@@ -30,6 +37,7 @@ extension CBOR: ExpressibleByStringLiteral {
 }
 
 extension CBOR: ExpressibleByBooleanLiteral {
+    /// `true` and `false` are ``bool(_:)``.
     @inlinable
     public init(booleanLiteral value: Bool) {
         self = .bool(value)
@@ -37,6 +45,8 @@ extension CBOR: ExpressibleByBooleanLiteral {
 }
 
 extension CBOR: ExpressibleByFloatLiteral {
+    /// A floating-point literal is a ``double(_:)``, so `1.5` encodes in nine
+    /// bytes. Use ``half(bitPattern:)`` or ``float(_:)`` for a narrower encoding.
     @inlinable
     public init(floatLiteral value: Double) {
         self = .double(value)
@@ -44,6 +54,7 @@ extension CBOR: ExpressibleByFloatLiteral {
 }
 
 extension CBOR: ExpressibleByArrayLiteral {
+    /// An array literal is an ``array(_:)``.
     @inlinable
     public init(arrayLiteral elements: CBOR...) {
         self = .array(elements)
@@ -51,6 +62,8 @@ extension CBOR: ExpressibleByArrayLiteral {
 }
 
 extension CBOR: ExpressibleByDictionaryLiteral {
+    /// A dictionary literal is a ``map(_:)``. If a key appears more than once, the
+    /// last value wins.
     @inlinable
     public init(dictionaryLiteral elements: (CBOR, CBOR)...) {
         var map: [CBOR: CBOR] = .init(minimumCapacity: elements.count)

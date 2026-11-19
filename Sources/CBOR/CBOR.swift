@@ -7,8 +7,8 @@
 /// ## Nesting depth
 ///
 /// `CBOR` is a recursive value type: an array holds `[CBOR]`, whose elements hold
-/// more. Parsing, encoding and equality all walk that structure iteratively, and
-/// hashing is depth-bounded, so none of them recurse. *Releasing* a value is done
+/// more. Parsing, encoding, equality and printing all walk that structure
+/// iteratively, and hashing is depth-bounded, so none of them recurse. *Releasing* a value is done
 /// by the Swift runtime, which does recurse — roughly 280 bytes of stack per level.
 /// That is fine at any depth real data reaches, but a value nested many thousands
 /// deep can overflow the stack when it goes out of scope, and the exact limit

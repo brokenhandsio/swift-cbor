@@ -23,6 +23,13 @@
 //   same ambiguity from the other direction.
 
 extension CBOR {
+    /// Whether two values are the same CBOR data item.
+    ///
+    /// Floats compare by bit pattern rather than by IEEE 754 equality: a NaN
+    /// equals an identical NaN, `0.0` and `-0.0` are different, and ``half(bitPattern:)``,
+    /// ``float(_:)`` and ``double(_:)`` never equal one another, even for the same
+    /// number. Nested values are compared iteratively, so comparing deeply nested
+    /// values cannot overflow the stack.
     public static func == (lhs: CBOR, rhs: CBOR) -> Bool {
         // Fast path. Scalars are the overwhelming majority of comparisons —
         // every map-key lookup during decoding lands here — so they must not
@@ -86,6 +93,11 @@ extension CBOR {
         return true
     }
 
+    /// Hash the value consistently with `==`.
+    ///
+    /// Hashing looks only at the first 16 levels of nesting, so it cannot
+    /// overflow the stack. Values that differ only below that depth hash the same,
+    /// and `==` tells them apart.
     public func hash(into hasher: inout Hasher) {
         hash(into: &hasher, depthBudget: Self.hashDepthBudget)
     }
