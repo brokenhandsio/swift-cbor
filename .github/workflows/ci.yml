@@ -213,6 +213,102 @@ jobs:
       - name: Check allocation thresholds
         run: swift package --disable-sandbox benchmark thresholds check
 
+  # The thresholds above are pinned on 6.3, and allocation counts can move
+  # between toolchains, so on the newer release the benchmarks are only built.
+  # Release configuration, because that is how `swift package benchmark` builds
+  # them.
+  benchmark-build:
+    name: Build benchmarks (Linux, Swift 6.4)
+    runs-on: ubuntu-latest
+    container: swift:6.4
+    env:
+      CBOR_BENCHMARK: "1" # wire up the (otherwise-gated) benchmark target
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build benchmarks
+        run: swift build -c release --product CBORBenchmarks
+
+  # Builds every fuzz target and replays its committed corpus and saved crashes
+  # once each, mutating nothing, on both supported toolchains.
+  #
+  # This lives here rather than in fuzz.yml. GitHub switches off a workflow
+  # that has a schedule after 60 days without repository activity, and that
+  # takes its push and pull_request triggers with it. It stays off when activity
+  # resumes. That is how the fuzz targets went unbuilt from October 2026 through
+  # the 1.0 changes. This workflow has no schedule, so it is never switched off.
+  #
+  # One job per toolchain, looping over the targets, so the instrumented CBOR
+  # and swift-fuzz builds are shared between them. Every target runs even after
+  # one fails, so a single run reports all of them.
+  fuzz-replay:
+    name: Fuzz replay (Swift ${{ matrix.swift }})
+    runs-on: ubuntu-latest
+    container: swift:${{ matrix.swift }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        swift: ["6.3", "6.4"]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build and replay each target
+        working-directory: Fuzzing
+        shell: bash
+        # Each line is a target, then any libFuzzer flags it needs.
+        # CBORDeepNesting: one input byte is one level of nesting, so it needs
+        # inputs far larger than libFuzzer's 4096-byte default.
+        run: |
+          set -uo pipefail
+          failed=()
+          while read -r target flags; do
+            echo "::group::$target"
+            # $flags is deliberately unquoted: it is zero or more arguments.
+            # stdin is the target list, so keep the build from reading it.
+            if ! swift package --allow-writing-to-package-directory \
+                fuzz "$target" --replay $flags < /dev/null; then
+              echo "::error::$target failed to build or replay"
+              failed+=("$target")
+            fi
+            echo "::endgroup::"
+          done <<'TARGETS'
+          CBORDecode
+          CBORRoundTrip
+          CBORDeepNesting -max_len=65536
+          CBORDecodingOptions
+          CBORDecodeFirst
+          CBORCodable
+          TARGETS
+          if [ ${#failed[@]} -ne 0 ]; then
+            echo "::error::Failed: ${failed[*]}"
+            exit 1
+          fi
+
+  # Lists changes to the public API that would break source compatibility,
+  # against the branch the pull request targets, and fails if there are any.
+  # A deliberate break is merged knowingly rather than discovered by a user.
+  api-breakage:
+    name: API breakage
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    container: swift:6.3
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The baseline is built from the base branch's history, which a
+          # shallow checkout does not have.
+          fetch-depth: 0
+      - name: Diagnose API breaking changes
+        shell: bash
+        run: |
+          # The checkout belongs to the runner's user, not the container's root,
+          # and git refuses to read a repository owned by someone else. SwiftPM
+          # clones the baseline from the .git directory itself, which git checks
+          # separately.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE/.git"
+          swift package diagnose-api-breaking-changes "origin/$GITHUB_BASE_REF"
+
   docs:
     name: DocC archive
     runs-on: ubuntu-latest

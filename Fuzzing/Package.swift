@@ -97,17 +97,17 @@ let package = Package(
         ),
 
         .executableTarget(
-            name: "CBOROptions",
-            dependencies: ["CBOROptionsTarget"],
-            path: "FuzzTargets/CBOROptionsShim"
+            name: "CBORDecodingOptions",
+            dependencies: ["CBORDecodingOptionsTarget"],
+            path: "FuzzTargets/CBORDecodingOptionsShim"
         ),
         .target(
-            name: "CBOROptionsTarget",
+            name: "CBORDecodingOptionsTarget",
             dependencies: [
                 .product(name: "Fuzzing", package: "swift-fuzz"),
                 .product(name: "CBOR", package: "swift-cbor"),
             ],
-            path: "FuzzTargets/CBOROptions",
+            path: "FuzzTargets/CBORDecodingOptions",
             plugins: [.plugin(name: "FuzzTargetPlugin", package: "swift-fuzz")]
         ),
 
