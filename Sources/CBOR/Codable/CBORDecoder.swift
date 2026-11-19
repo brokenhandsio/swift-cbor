@@ -16,6 +16,11 @@ import Foundation
 /// ``CBOREncoder`` writes. If that is absent and the key has an `intValue`, it then
 /// tries the integer, so types whose `CodingKeys` have `Int` raw values can decode
 /// integer-keyed maps such as COSE keys.
+///
+/// With the `FoundationSupport` trait (the default), `Data` decodes from a byte
+/// string and `Date` from a number of seconds since 1970-01-01T00:00Z, either
+/// wrapped in tag 1 as ``CBOREncoder`` writes it or bare, as protocols such as
+/// CWT (RFC 8392) write timestamps. Text dates (tag 0) are not decoded as `Date`.
 public struct CBORDecoder: Sendable {
     /// Options applied when reading the CBOR bytes.
     public var options: CBORDecodingOptions
@@ -108,7 +113,7 @@ private final class _CBORDecoder: Decoder {
     }
 
     /// Decode any `Decodable` type from this decoder's value, special-casing `Data`
-    /// when Foundation support is enabled.
+    /// and `Date` when Foundation support is enabled.
     func unbox<T: Decodable>(as type: T.Type) throws -> T {
         #if FoundationSupport
         if type == Data.self {
@@ -116,6 +121,12 @@ private final class _CBORDecoder: Decoder {
                 throw typeMismatch(Data.self, cbor, codingPath)
             }
             return Data(bytes) as! T
+        }
+        if type == Date.self {
+            guard let seconds = epochSeconds(cbor) else {
+                throw typeMismatch(Date.self, cbor, codingPath)
+            }
+            return Date(timeIntervalSince1970: seconds) as! T
         }
         #endif
         return try T(from: self)
@@ -144,6 +155,25 @@ private struct PathKey: CodingKey {
 
     static let `super` = PathKey(stringValue: "super")
 }
+
+#if FoundationSupport
+/// Seconds since 1970 from tag 1 epoch time (RFC 8949 §3.4.2) or a bare number,
+/// or `nil` if the value is neither.
+private func epochSeconds(_ cbor: CBOR) -> Double? {
+    var content = cbor
+    if case .tagged(.epochDateTime, let inner) = cbor {
+        content = inner
+    }
+    switch content {
+    case .unsignedInt(let value):
+        return Double(value)
+    case .negativeInt(let value):
+        return -1 - Double(value)
+    default:
+        return content.doubleValue
+    }
+}
+#endif
 
 // MARK: - Errors
 

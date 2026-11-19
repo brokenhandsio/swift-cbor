@@ -124,8 +124,14 @@ let reading = try CBORDecoder().decode(Reading.self, from: bytes)
 ```
 
 Swift structs encode to CBOR maps keyed by their property names, with the keys
-sorted. With the `FoundationSupport` trait enabled (the default), `Data`
-properties encode as CBOR byte strings.
+sorted. With the `FoundationSupport` trait enabled (the default), two Foundation
+types get a native CBOR form:
+
+- `Data` encodes as a byte string.
+- `Date` encodes as epoch-based date/time (tag 1): seconds since 1970, as an
+  integer for a whole second and a double otherwise. Decoding also accepts a bare
+  number of seconds, as CWT and similar protocols write timestamps. Text dates
+  (tag 0) don't decode as `Date`.
 
 ### Decoding an embedded item
 

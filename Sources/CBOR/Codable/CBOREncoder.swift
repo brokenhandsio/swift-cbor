@@ -14,6 +14,14 @@ import Foundation
 ///
 /// Output is deterministic in the same way as ``CBOR/encode()``: map keys are
 /// sorted, so the same value always encodes to the same bytes.
+///
+/// With the `FoundationSupport` trait (the default), two Foundation types get a
+/// native CBOR form rather than their own `Encodable` conformance:
+///
+/// - `Data` encodes as a byte string.
+/// - `Date` encodes as an epoch-based date/time (tag 1, RFC 8949 §3.4.2): seconds
+///   since 1970-01-01T00:00Z, as an integer when the date is a whole second and
+///   as a double otherwise.
 public struct CBOREncoder: Sendable {
     /// Create an encoder.
     public init() {}
@@ -23,9 +31,17 @@ public struct CBOREncoder: Sendable {
         var out: [UInt8] = []
         out.reserveCapacity(64)
         #if FoundationSupport
-        if let data = value as? Data {
+        // Metatype comparisons rather than `as?` casts: in the unspecialized
+        // generic code Codable runs through, a failed dynamic cast is the slower
+        // of the two, and nearly every value fails both.
+        if T.self == Data.self {
+            let data = value as! Data
             appendTypedArgument(major: 2, UInt64(data.count), to: &out)
             out.append(contentsOf: data)
+            return out
+        }
+        if T.self == Date.self {
+            EncodingNode.date(value as! Date).write(to: &out)
             return out
         }
         #endif
@@ -44,16 +60,35 @@ public struct CBOREncoder: Sendable {
 
 private enum EncodingNode {
     case scalar(CBOR)
+    /// A tag around a leaf value, such as a `Date`'s tag 1.
+    case taggedScalar(CBORTag, CBOR)
     case container(any EncodingContainerNode)
 
     func write(to out: inout [UInt8]) {
         switch self {
         // A `.scalar` node is always a leaf CBOR value, so it can be written directly
         // without spinning up the iterative encoder's work stack.
-        case .scalar(let value): value.appendScalarBytes(to: &out)
-        case .container(let node): node.write(to: &out)
+        case .scalar(let value):
+            value.appendScalarBytes(to: &out)
+        case .taggedScalar(let tag, let value):
+            appendTypedArgument(major: 6, tag.rawValue, to: &out)
+            value.appendScalarBytes(to: &out)
+        case .container(let node):
+            node.write(to: &out)
         }
     }
+
+    #if FoundationSupport
+    /// A `Date` as tag 1 epoch time: whole seconds as an integer, so they encode
+    /// compactly and decode exactly, and anything else as a double.
+    static func date(_ date: Date) -> EncodingNode {
+        let seconds = date.timeIntervalSince1970
+        if let whole = Int64(exactly: seconds) {
+            return .taggedScalar(.epochDateTime, cborFromSigned(whole))
+        }
+        return .taggedScalar(.epochDateTime, .double(seconds))
+    }
+    #endif
 }
 
 private protocol EncodingContainerNode: AnyObject {
@@ -66,13 +101,16 @@ private func cborFromSigned(_ value: Int64) -> CBOR {
     value < 0 ? .negativeInt(~UInt64(bitPattern: value)) : .unsignedInt(UInt64(value))
 }
 
-/// Encode a nested `Encodable` value into a node, special-casing `Data`.
+/// Encode a nested `Encodable` value into a node, special-casing `Data` and `Date`.
 private func boxNode<T: Encodable>(
     _ value: T, codingPath: [any CodingKey]
 ) throws -> EncodingNode {
     #if FoundationSupport
-    if let data = value as? Data {
-        return .scalar(.byteString([UInt8](data)))
+    if T.self == Data.self {
+        return .scalar(.byteString([UInt8](value as! Data)))
+    }
+    if T.self == Date.self {
+        return .date(value as! Date)
     }
     #endif
     let encoder = _CBOREncoder(codingPath: codingPath)
