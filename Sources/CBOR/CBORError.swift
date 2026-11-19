@@ -25,7 +25,7 @@ public enum CBORError: Error, Hashable, Sendable {
     /// one item was expected. The associated value is the number of unconsumed bytes.
     case trailingData(remaining: Int)
 
-    /// A map contained a duplicate key. Only reported when
-    /// ``CBOROptions/rejectDuplicateMapKeys`` is enabled.
+    /// A map contained a duplicate key. Reported unless
+    /// ``CBOROptions/rejectDuplicateMapKeys`` is turned off.
     case duplicateMapKey
 }

@@ -91,12 +91,42 @@ struct MalformedInputTests {
         #expect(consumed == 1)
     }
 
-    @Test("duplicate map keys are rejected when requested")
-    func duplicateKeys() {
-        // {1: 2, 1: 3}
-        let input = bytes(fromHex: "a201020103")
+    @Test("duplicate map keys are rejected by default", arguments: [
+        "a201020103",       // {1: 2, 1: 3}
+        "bf01020103ff",     // the same, as an indefinite-length map
+        "a20102180103",     // {1: 2, 1: 3} with the second 1 in a non-shortest form
+        "a2616101616102",   // {"a": 1, "a": 2}
+        "81a201020103",     // a duplicate inside a nested map
+    ])
+    func duplicateKeys(hex: String) {
         #expect(throws: CBORError.duplicateMapKey) {
-            try CBOR.decode(input, options: CBOROptions(rejectDuplicateMapKeys: true))
+            try CBOR.decode(bytes(fromHex: hex))
         }
+    }
+
+    @Test("duplicate map keys are accepted when allowed, and the last value wins")
+    func duplicateKeysAllowed() throws {
+        let options = CBOROptions(rejectDuplicateMapKeys: false)
+        #expect(try CBOR.decode(bytes(fromHex: "a201020103"), options: options) == [1: 3])
+        #expect(try CBOR.decode(bytes(fromHex: "bf01020103ff"), options: options) == [1: 3])
+    }
+
+    @Test("keys that differ only in float sign or type are not duplicates")
+    func distinctFloatKeys() throws {
+        // {0.0: 1, -0.0: 2} as halves, then {1: 1, 1.0: 2}.
+        #expect(try CBOR.decode(bytes(fromHex: "a2f9000001f9800002")).mapValue?.count == 2)
+        #expect(try CBOR.decode(bytes(fromHex: "a20101f93c0002")).mapValue?.count == 2)
+    }
+
+    @Test("the Codable decoder rejects duplicate keys by default")
+    func codableDuplicateKeys() throws {
+        struct Point: Decodable { var x: Int }
+        // {"x": 1, "x": 2}
+        let input = bytes(fromHex: "a2617801617802")
+        #expect(throws: CBORError.duplicateMapKey) {
+            try CBORDecoder().decode(Point.self, from: input)
+        }
+        let lenient = CBORDecoder(options: CBOROptions(rejectDuplicateMapKeys: false))
+        #expect(try lenient.decode(Point.self, from: input).x == 2)
     }
 }

@@ -16,7 +16,12 @@ private func iterations(_ fallback: Int) -> Int {
     return fallback
 }
 
-private let decodeOptions = CBOROptions(maximumDepth: 32)
+// The generator draws map keys at random, so a generated map can repeat one.
+// That is well-formed but not valid CBOR, and rejected by default; these loops
+// accept it so the round trip still covers maps (the last value wins, and
+// encoding writes one entry per key). Rejection has its own tests, and the
+// libFuzzer targets decode with default options.
+private let decodeOptions = CBOROptions(maximumDepth: 32, rejectDuplicateMapKeys: false)
 
 private struct Probe: Codable {
     var a: Int?

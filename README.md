@@ -141,8 +141,8 @@ let remainder = buffer[consumed...]
 
 ```swift
 let options = CBOROptions(
-    maximumDepth: 16,            // bound nesting on adversarial input (default 512)
-    rejectDuplicateMapKeys: true // throw on duplicate map keys (default false)
+    maximumDepth: 16,             // bound nesting on adversarial input (default 512)
+    rejectDuplicateMapKeys: false // accept duplicate map keys, last wins (default true)
 )
 let value = try CBOR.decode(bytes, options: options)
 ```
@@ -247,7 +247,7 @@ libFuzzer harnesses against the real API:
 | `CBORDecode` | Decoding arbitrary bytes |
 | `CBORRoundTrip` | Decode, re-encode, decode again — asserting a fixed point |
 | `CBORDeepNesting` | Nesting depth, with inputs far larger than libFuzzer's default |
-| `CBOROptions` | The options themselves: depth limit, duplicate-key rejection, determinism |
+| `CBOROptions` | The options themselves: depth limit and duplicate-key rejection |
 | `CBORDecodeFirst` | That `decodeFirst` never reports consuming more bytes than it was given |
 | `CBORCodable` | The `Codable` bridge, asserting a deterministic encode fixed point |
 

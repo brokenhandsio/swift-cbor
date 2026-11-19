@@ -41,8 +41,11 @@ enum CBORParser {
                 return nil
             case .map:
                 if let key = pendingKey {
-                    if rejectDuplicates, pairs[key] != nil { throw CBORError.duplicateMapKey }
-                    pairs[key] = value
+                    // `updateValue` both inserts and reports a previous entry, so
+                    // rejecting duplicates costs no extra hash lookup.
+                    if pairs.updateValue(value, forKey: key) != nil, rejectDuplicates {
+                        throw CBORError.duplicateMapKey
+                    }
                     pendingKey = nil
                     remaining -= 1
                     return remaining == 0 ? .map(pairs) : nil
@@ -51,8 +54,9 @@ enum CBORParser {
                 return nil
             case .indefiniteMap:
                 if let key = pendingKey {
-                    if rejectDuplicates, pairs[key] != nil { throw CBORError.duplicateMapKey }
-                    pairs[key] = value
+                    if pairs.updateValue(value, forKey: key) != nil, rejectDuplicates {
+                        throw CBORError.duplicateMapKey
+                    }
                     pendingKey = nil
                 } else {
                     pendingKey = value

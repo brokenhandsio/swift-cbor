@@ -82,8 +82,8 @@ struct CodableCorrectnessTests {
     @Test("a key encoded twice keeps its last value")
     func repeatedKeyLastWriteWins() throws {
         let bytes = try CBOREncoder().encode(RepeatedKey())
-        // Exactly one entry per key — strict decoding would reject a duplicate.
-        let decoded = try CBOR.decode(bytes, options: .init(rejectDuplicateMapKeys: true))
+        // Exactly one entry per key: decoding rejects a duplicate by default.
+        let decoded = try CBOR.decode(bytes)
         #expect(decoded == ["a": 1, "b": 2])
         #expect(hexString(bytes) == "a2616101616202") // {"a": 1, "b": 2}, sorted
     }
@@ -91,7 +91,7 @@ struct CodableCorrectnessTests {
     @Test("a nested container opened twice keeps the last one")
     func repeatedNestedContainer() throws {
         let bytes = try CBOREncoder().encode(RepeatedNestedKey())
-        let decoded = try CBOR.decode(bytes, options: .init(rejectDuplicateMapKeys: true))
+        let decoded = try CBOR.decode(bytes)
         #expect(decoded == ["inner": ["x": 2]])
     }
 
