@@ -305,7 +305,11 @@ enum CBORParser {
     }
 
     /// The next `length` bytes, as a span, advancing `offset` past them.
+    ///
+    /// The result borrows from `span`. Swift 6.4 infers that; 6.3 needs it spelled
+    /// out.
     @inline(__always)
+    @_lifetime(copy span)
     private static func readSpan(
         _ length: UInt64,
         _ span: Span<UInt8>,
