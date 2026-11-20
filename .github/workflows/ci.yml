@@ -1,5 +1,10 @@
 name: CI
 
+# Every job here only reads the repository. Without this the token gets the
+# organization's default, which is read and write.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]

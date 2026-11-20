@@ -9,6 +9,11 @@
 # That is why nothing that gates a pull request lives here any more.
 name: Fuzz
 
+# Every job here only reads the repository. Without this the token gets the
+# organization's default, which is read and write.
+permissions:
+  contents: read
+
 on:
   schedule:
     # 03:17 UTC daily. Off the hour to avoid GitHub's scheduler backlog.
