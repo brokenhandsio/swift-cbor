@@ -1,13 +1,13 @@
 {
-  "originHash" : "ffd676ea6f7ddc261896d772443951d248a5c53f38aad2bb1cb31868a455d8d7",
+  "originHash" : "cd7386f7f19587b57d1986289aca4c9c04877b594f3180aeaa449db5010391c4",
   "pins" : [
     {
       "identity" : "swift-fuzz",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/brokenhandsio/swift-fuzz.git",
       "state" : {
-        "revision" : "598aa683d14be84a6f8dd914e01528bce4c21ca4",
-        "version" : "0.4.0"
+        "revision" : "7537f1580253ea3efc841741e8f845cc2bc642ee",
+        "version" : "1.0.0"
       }
     }
   ],

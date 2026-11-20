@@ -15,7 +15,7 @@ let package = Package(
         // The `package:` label for a path dependency is the *directory* name,
         // not the name declared in its Package.swift.
         .package(path: "../"),
-        .package(url: "https://github.com/brokenhandsio/swift-fuzz.git", from: "0.4.0"),
+        .package(url: "https://github.com/brokenhandsio/swift-fuzz.git", from: "1.0.0"),
     ],
     targets: [
         // Each fuzz target is a pair: a pure-C executable holding libFuzzer's
