@@ -273,7 +273,7 @@ libFuzzer harnesses against the real API:
 | `CBORDecode` | Decoding arbitrary bytes |
 | `CBORRoundTrip` | Decode, re-encode, decode again — asserting a fixed point |
 | `CBORDeepNesting` | Nesting depth, with inputs far larger than libFuzzer's default |
-| `CBOROptions` | The options themselves: depth limit and duplicate-key rejection |
+| `CBORDecodingOptions` | The options themselves: depth limit and duplicate-key rejection |
 | `CBORDecodeFirst` | That `decodeFirst` never reports consuming more bytes than it was given |
 | `CBORCodable` | The `Codable` bridge, asserting a deterministic encode fixed point |
 
@@ -282,10 +282,10 @@ Four bugs have been found this way and all four are fixed: float identity on map
 recursive deallocation — bounded rather than fixed, which is what `maximumSupportedDepth`
 is for — and a force-unwrap in `superEncoder()`.
 
-CI runs two jobs. A **replay** gate on every push and pull request re-runs the committed
-corpus and every saved crash artefact, so a previously-fixed bug cannot come back
-unnoticed. A nightly **soak** fuzzes each target for ten minutes and uploads anything it
-finds. Corpora and crash artefacts live in `Fuzzing/` and are committed deliberately:
+CI fuzzes in two ways. A **replay** gate on every push and pull request builds each
+target on Swift 6.3 and 6.4 and re-runs the committed corpus and every saved crash
+artefact, so a previously-fixed bug cannot come back unnoticed. A nightly **soak** fuzzes
+each target for ten minutes and uploads anything it finds. Corpora and crash artefacts live in `Fuzzing/` and are committed deliberately:
 they are the regression suite.
 
 ```sh

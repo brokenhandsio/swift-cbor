@@ -10,7 +10,7 @@ let fuzzTargets: @Sendable () -> Void = {
     // The provider takes control values from the back of the input and the
     // payload from the front, so mutating the CBOR bytes does not reshuffle the
     // configuration — the fuzzer can hold one fixed while exploring the other.
-    FuzzTarget.structured("CBOROptions") { data in
+    FuzzTarget.structured("CBORDecodingOptions") { data in
         let options = CBORDecodingOptions(
             maximumDepth: Int(data.integer(in: UInt16(1)...UInt16(2048))),
             rejectDuplicateMapKeys: data.bool()
