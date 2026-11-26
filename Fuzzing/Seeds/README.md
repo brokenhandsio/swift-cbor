@@ -25,5 +25,11 @@ discoveries shared a directory.
 - `CBORDeepMapKeys/many-deep-keys` — a short text seed that the target expands
   into a map with many distinct keys nested at least 17 levels deep. It exercises the
   key shape that once made map decoding quadratic.
+- `CBORDecode/{unicode-distinct-keys,signed-zero-duplicate,cross-width-duplicate,nan-cross-width-duplicate}`
+  and their `CBORRoundTrip` counterparts — byte-distinct Unicode keys and
+  RFC 8949 float-key equivalence cases.
+- `CBORDeepNesting/large-declared-{maps,arrays}` — 512 nested containers that
+  each claim 1024 entries, then end abruptly. They exercise the shared
+  reservation budget on a small input.
 
 Adding more is just a matter of dropping files in.

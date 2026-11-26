@@ -13,7 +13,7 @@ Binary Object Representation, RFC 8949) library for Swift.
 - **Complete RFC 8949 support.** Every example in RFC 8949 Appendix A round-trips,
   including tags, indefinite-length items, half/single/double floats, and the full
   ±2⁶⁴ integer range.
-- **Deterministic encoding.** The same value always encodes to the same bytes:
+- **Deterministic encoding.** The same representation always encodes to the same bytes:
   shortest-form integers, definite lengths and sorted map keys (RFC 8949 §4.2.1).
   Floats keep the width they were given rather than being narrowed.
 - **Fast and lean.** Benchmarked against other Swift CBOR libraries, with fewer

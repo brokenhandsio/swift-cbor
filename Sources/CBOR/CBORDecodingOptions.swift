@@ -21,9 +21,9 @@ public struct CBORDecodingOptions: Sendable {
     /// RFC 8949 §5.6 says a map with a duplicate key is not valid CBOR, and
     /// decoders disagree about which value such a map means. Rejecting it means
     /// bytes that another decoder reads differently never decode silently. Keys
-    /// are compared as decoded values, so `1` written in one byte and `1` written in
-    /// two are the same key. Floats compare by bit pattern, so `0.0` and `-0.0` are
-    /// different keys, as are `1` and `1.0`.
+    /// follow RFC 8949 §5.6.1: text compares by UTF-8 bytes, equal floats of
+    /// any width (including signed zero) are duplicates, while `1` and `1.0`
+    /// remain distinct. Non-shortest integer encodings compare by value.
     ///
     /// Set this to `false` to accept such maps; the last value for a key then wins.
     public var rejectDuplicateMapKeys: Bool

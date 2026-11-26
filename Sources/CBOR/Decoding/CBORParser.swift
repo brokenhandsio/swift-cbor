@@ -90,6 +90,9 @@ enum CBORParser {
         let maxDepth = min(options.maximumDepth, CBORDecodingOptions.maximumSupportedDepth)
         let rejectDuplicates = options.rejectDuplicateMapKeys
         var stack: [Frame] = []
+        // A count is untrusted until its children arrive. A single budget keeps
+        // eager reservations across all open frames proportional to input size.
+        var reservationBudget = span.count
 
         while true {
             // A `break` (0xFF) closes the innermost indefinite-length container.
@@ -164,7 +167,9 @@ enum CBORParser {
                 } else {
                     var frame = Frame(kind: .array, start: start)
                     frame.remaining = count
-                    frame.items.reserveCapacity(min(count, 1024))
+                    let capacity = min(count, min(1024, reservationBudget))
+                    frame.items.reserveCapacity(capacity)
+                    reservationBudget -= capacity
                     stack.append(frame)
                     continue
                 }
@@ -180,7 +185,9 @@ enum CBORParser {
                 } else {
                     var frame = Frame(kind: .map, start: start)
                     frame.remaining = count
-                    frame.pairs.reserveCapacity(min(count, 1024))
+                    let capacity = min(count, min(1024, reservationBudget))
+                    frame.pairs.reserveCapacity(capacity)
+                    reservationBudget -= capacity
                     stack.append(frame)
                     continue
                 }
