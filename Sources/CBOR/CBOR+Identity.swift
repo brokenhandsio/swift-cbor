@@ -194,7 +194,20 @@ extension CBOR {
         case .textString(let value):
             hasher.combine(3 as UInt8)
             hasher.combine(value.utf8.count)
-            for byte in value.utf8 { hasher.combine(byte) }
+            // Combine up to eight UTF-8 bytes at once. Hashing each byte
+            // separately is expensive for maps with many text keys.
+            var chunk: UInt64 = 0
+            var bytesInChunk = 0
+            for byte in value.utf8 {
+                chunk = (chunk << 8) | UInt64(byte)
+                bytesInChunk += 1
+                if bytesInChunk == 8 {
+                    hasher.combine(chunk)
+                    chunk = 0
+                    bytesInChunk = 0
+                }
+            }
+            if bytesInChunk != 0 { hasher.combine(chunk) }
         case .simple(let value):
             hasher.combine(7 as UInt8)
             hasher.combine(value)
