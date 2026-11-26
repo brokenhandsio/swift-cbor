@@ -44,6 +44,8 @@ jobs:
             args: ""
           - target: CBORDeepNesting
             args: "-max_len=65536"
+          - target: CBORDeepMapKeys
+            args: ""
           # Two control values off the back, the rest passed through as
           # ordinary CBOR, so libFuzzer's default length limit is fine.
           - target: CBORDecodingOptions

@@ -38,23 +38,19 @@ struct DeepHashingTests {
 
     @Test("Equal deep values still hash equally")
     func equalDeepValuesHashEqually() {
-        // The contract that matters. Bounding the descent is only sound if this
-        // holds.
+        // Iterative hashing must still obey the Hashable contract at every depth.
         let a = nestedArrays(1_000)
         let b = nestedArrays(1_000)
         #expect(a == b)
         #expect(a.hashValue == b.hashValue)
     }
 
-    @Test("Values differing only below the budget collide but are not equal")
-    func deepDifferencesCollide() {
-        // Hashing looks at a bounded prefix, so these share a hash. That is a
-        // collision, not a contract violation: `==` is exact and separates
-        // them, which is what a Dictionary falls back on.
+    @Test("Deep differences affect hashes")
+    func deepDifferencesHashDifferently() {
         let a = nestedArrays(40, leaf: .unsignedInt(1))
         let b = nestedArrays(40, leaf: .unsignedInt(2))
         #expect(a != b)
-        #expect(a.hashValue == b.hashValue)
+        #expect(a.hashValue != b.hashValue)
 
         var map: [CBOR: CBOR] = [:]
         map[a] = "a"
@@ -62,6 +58,19 @@ struct DeepHashingTests {
         #expect(map.count == 2)
         #expect(map[a] == "a")
         #expect(map[b] == "b")
+    }
+
+    @Test("Many keys with the same deep prefix do not share a hash")
+    func manyDeepKeys() throws {
+        let keys = (0..<256).map { nestedArrays(17, leaf: .unsignedInt(UInt64($0))) }
+        #expect(Set(keys.map(\.hashValue)).count == keys.count)
+
+        var map: [CBOR: CBOR] = [:]
+        for (index, key) in keys.enumerated() {
+            map[key] = .unsignedInt(UInt64(index))
+        }
+        let decoded = try CBOR.decode(CBOR.map(map).encode())
+        #expect(decoded.mapValue?.count == keys.count)
     }
 
     @Test("Shallow differences still separate, so hashing stays useful")
@@ -73,13 +82,12 @@ struct DeepHashingTests {
 
     @Test("Maps hash independently of iteration order")
     func mapHashingIsCommutative() {
-        // The map case combines elements commutatively by hand so the depth
-        // budget can reach them. Getting that wrong would make equal maps hash
-        // differently depending on insertion order.
+        // The map case combines elements commutatively. Nested values still
+        // need to be hashed completely without depending on dictionary order.
         var first: [CBOR: CBOR] = [:]
-        for index in 0..<32 { first[.unsignedInt(UInt64(index))] = .array([.unsignedInt(UInt64(index))]) }
+        for index in 0..<32 { first[.unsignedInt(UInt64(index))] = nestedArrays(40, leaf: .unsignedInt(UInt64(index))) }
         var second: [CBOR: CBOR] = [:]
-        for index in (0..<32).reversed() { second[.unsignedInt(UInt64(index))] = .array([.unsignedInt(UInt64(index))]) }
+        for index in (0..<32).reversed() { second[.unsignedInt(UInt64(index))] = nestedArrays(40, leaf: .unsignedInt(UInt64(index))) }
         #expect(CBOR.map(first) == CBOR.map(second))
         #expect(CBOR.map(first).hashValue == CBOR.map(second).hashValue)
     }

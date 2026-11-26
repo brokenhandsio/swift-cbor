@@ -22,5 +22,8 @@ discoveries shared a directory.
   protecting for the same reason: it is the input that makes the deep-nesting
   target productive from the first run, and one byte of input is one level of
   nesting.
+- `CBORDeepMapKeys/many-deep-keys` — a short text seed that the target expands
+  into a map with many distinct keys nested at least 17 levels deep. It exercises the
+  key shape that once made map decoding quadratic.
 
 Adding more is just a matter of dropping files in.

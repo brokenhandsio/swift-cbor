@@ -93,34 +93,111 @@ extension CBOR {
         return true
     }
 
-    /// Hash the value consistently with `==`.
+    /// Hash the complete value consistently with `==`.
     ///
-    /// Hashing looks only at the first 16 levels of nesting, so it cannot
-    /// overflow the stack. Values that differ only below that depth hash the same,
-    /// and `==` tells them apart.
+    /// Containers are walked with an explicit stack. A fixed depth cutoff would
+    /// make every key with the same prefix collide, allowing a small CBOR map to
+    /// take quadratic time to decode.
     public func hash(into hasher: inout Hasher) {
-        hash(into: &hasher, depthBudget: Self.hashDepthBudget)
+        switch self {
+        case .array, .map, .tagged:
+            hasher.combine(deepHash())
+        default:
+            // Map keys are usually scalars, so they do not need a work stack or
+            // an intermediate Hasher.
+            hashScalar(into: &hasher)
+        }
     }
 
-    /// How far into a value hashing descends.
-    ///
-    /// Synthesized hashing recursed once per level of nesting and overflowed the
-    /// stack somewhere between depth 512 and 1000 — uncomfortably close to the
-    /// default `CBORDecodingOptions.maximumDepth` of 512, and reachable from decoded
-    /// input the moment a caller raises that limit, because the parser stores
-    /// map keys with `pairs[key] = value`.
-    ///
-    /// Bounding the descent fixes that without an explicit work stack. Hashing
-    /// may legitimately look at part of a value rather than all of it: the
-    /// contract is that equal values hash equally, and a bounded projection of
-    /// two equal values is still equal. Values differing only below this depth
-    /// collide, and `==` — which is exact, and iterative — separates them.
-    ///
-    /// 16 is far past anything real CBOR nests keys to, and costs at most 16
-    /// frames.
-    private static let hashDepthBudget = 16
+    /// Finish child hashes before their parent, using O(depth) temporary space.
+    /// A map combines pair hashes commutatively because its iteration order is
+    /// unspecified; arrays and tags preserve their element order.
+    private func deepHash() -> Int {
+        var frames: [HashFrame] = []
+        var work = HashWork.value(self)
 
-    private func hash(into hasher: inout Hasher, depthBudget: Int) {
+        while true {
+            switch work {
+            case .value(let value):
+                switch value {
+                case .array(let elements):
+                    var hasher = Hasher()
+                    hasher.combine(4 as UInt8)
+                    hasher.combine(elements.count)
+                    if let first = elements.first {
+                        frames.append(.array(elements, next: 1, hasher))
+                        work = .value(first)
+                    } else {
+                        work = .digest(hasher.finalize())
+                    }
+                case .map(let entries):
+                    if entries.isEmpty {
+                        var hasher = Hasher()
+                        hasher.combine(5 as UInt8)
+                        hasher.combine(0)
+                        hasher.combine(0)
+                        work = .digest(hasher.finalize())
+                    } else {
+                        let index = entries.startIndex
+                        frames.append(.map(entries, index: index, keyDigest: nil, combined: 0))
+                        work = .value(entries[index].key)
+                    }
+                case .tagged(let tag, let item):
+                    var hasher = Hasher()
+                    hasher.combine(6 as UInt8)
+                    hasher.combine(tag)
+                    frames.append(.tag(hasher))
+                    work = .value(item)
+                default:
+                    var hasher = Hasher()
+                    value.hashScalar(into: &hasher)
+                    work = .digest(hasher.finalize())
+                }
+
+            case .digest(let digest):
+                guard let frame = frames.popLast() else { return digest }
+                switch frame {
+                case .array(let elements, let next, var hasher):
+                    hasher.combine(digest)
+                    if next < elements.count {
+                        frames.append(.array(elements, next: next + 1, hasher))
+                        work = .value(elements[next])
+                    } else {
+                        work = .digest(hasher.finalize())
+                    }
+                case .map(let entries, let index, let keyDigest, let combined):
+                    if let keyDigest {
+                        var pairHasher = Hasher()
+                        pairHasher.combine(keyDigest)
+                        pairHasher.combine(digest)
+                        let updated = combined ^ pairHasher.finalize()
+                        let next = entries.index(after: index)
+                        if next == entries.endIndex {
+                            var hasher = Hasher()
+                            hasher.combine(5 as UInt8)
+                            hasher.combine(entries.count)
+                            hasher.combine(updated)
+                            work = .digest(hasher.finalize())
+                        } else {
+                            frames.append(.map(entries, index: next, keyDigest: nil, combined: updated))
+                            work = .value(entries[next].key)
+                        }
+                    } else {
+                        frames.append(.map(entries, index: index, keyDigest: digest, combined: combined))
+                        work = .value(entries[index].value)
+                    }
+                case .tag(var hasher):
+                    hasher.combine(digest)
+                    work = .digest(hasher.finalize())
+                }
+            }
+        }
+    }
+
+    /// Hash a value with no children. All comparisons in the scalar fast path
+    /// above have matching cases here, including Swift's canonical String
+    /// equality and the floats' bit-pattern identity.
+    private func hashScalar(into hasher: inout Hasher) {
         switch self {
         case .unsignedInt(let value):
             hasher.combine(0 as UInt8)
@@ -156,35 +233,21 @@ extension CBOR {
         case .double(let value):
             hasher.combine(13 as UInt8)
             hasher.combine(value.bitPattern)
-
-        case .array(let elements):
-            hasher.combine(4 as UInt8)
-            hasher.combine(elements.count)
-            guard depthBudget > 0 else { return }
-            for element in elements {
-                element.hash(into: &hasher, depthBudget: depthBudget - 1)
-            }
-        case .map(let entries):
-            hasher.combine(5 as UInt8)
-            hasher.combine(entries.count)
-            guard depthBudget > 0 else { return }
-            // Combined commutatively, because a dictionary has no order: two
-            // equal maps must hash the same however they happen to iterate.
-            // This is what `Dictionary.hash(into:)` does, done here so the
-            // depth budget reaches the elements.
-            var commutative = 0
-            for (key, value) in entries {
-                var element = Hasher()
-                key.hash(into: &element, depthBudget: depthBudget - 1)
-                value.hash(into: &element, depthBudget: depthBudget - 1)
-                commutative ^= element.finalize()
-            }
-            hasher.combine(commutative)
-        case .tagged(let tag, let value):
-            hasher.combine(6 as UInt8)
-            hasher.combine(tag)
-            guard depthBudget > 0 else { return }
-            value.hash(into: &hasher, depthBudget: depthBudget - 1)
+        case .array, .map, .tagged:
+            break // handled by deepHash()
         }
     }
+}
+
+/// The parent waiting for a child hash. Only one child of a container is
+/// pending at a time, so hashing a wide array or map uses O(depth) space.
+private enum HashFrame {
+    case array([CBOR], next: Int, Hasher)
+    case map([CBOR: CBOR], index: [CBOR: CBOR].Index, keyDigest: Int?, combined: Int)
+    case tag(Hasher)
+}
+
+private enum HashWork {
+    case value(CBOR)
+    case digest(Int)
 }

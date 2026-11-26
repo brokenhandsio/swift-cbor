@@ -46,7 +46,7 @@ public struct CBORDecodingOptions: Sendable {
     ///
     /// ``CBOR`` is a recursive value type: an array holds `[CBOR]`, whose elements
     /// hold more. Parsing and encoding walk that structure with explicit heap
-    /// stacks, and equality and hashing are bounded — but *releasing* a value is
+    /// stacks, and equality and hashing are iterative — but *releasing* a value is
     /// done by the Swift runtime, which recurses once per level and cannot be
     /// intercepted. A value nested deeply enough therefore decodes successfully
     /// and then overflows the stack when it goes out of scope.

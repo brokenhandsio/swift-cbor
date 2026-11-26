@@ -273,6 +273,7 @@ libFuzzer harnesses against the real API:
 | `CBORDecode` | Decoding arbitrary bytes |
 | `CBORRoundTrip` | Decode, re-encode, decode again — asserting a fixed point |
 | `CBORDeepNesting` | Nesting depth, with inputs far larger than libFuzzer's default |
+| `CBORDeepMapKeys` | Maps with many keys sharing a deeply nested prefix |
 | `CBORDecodingOptions` | The options themselves: depth limit and duplicate-key rejection |
 | `CBORDecodeFirst` | That `decodeFirst` never reports consuming more bytes than it was given |
 | `CBORCodable` | The `Codable` bridge, asserting a deterministic encode fixed point |
