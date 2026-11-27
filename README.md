@@ -23,7 +23,7 @@ Binary Object Representation, RFC 8949) library for Swift.
 - **Optional Foundation.** Foundation is only used to bridge `Data`; it lives behind
   a package trait you can switch off to build with no Foundation dependency at all.
 - **`Sendable` throughout**, with a `@nonexhaustive` public API designed to evolve
-  without source breaks.
+  without source breaks. Codable `userInfo` values must also be `Sendable`.
 
 ## Requirements
 
@@ -149,6 +149,18 @@ types get a native CBOR form:
   integer for a whole second and a double otherwise. Decoding also accepts a bare
   number of seconds, as CWT and similar protocols write timestamps. Text dates
   (tag 0) don't decode as `Date`.
+
+Custom `Encodable` and `Decodable` implementations can read contextual values
+from `encoder.userInfo` and `decoder.userInfo`. Pass the context when creating a
+coder, or set its `userInfo` property before use:
+
+```swift
+let contextKey = CodingUserInfoKey(rawValue: "example.context")!
+let encoder = CBOREncoder(userInfo: [contextKey: "request"])
+let decoder = CBORDecoder(userInfo: [contextKey: "response"])
+```
+
+The context reaches nested values and is not part of the CBOR bytes.
 
 ### Decoding an embedded item
 

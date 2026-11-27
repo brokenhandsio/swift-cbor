@@ -23,8 +23,22 @@ import Foundation
 ///   since 1970-01-01T00:00Z, as an integer when the date is a whole second and
 ///   as a double otherwise.
 public struct CBOREncoder: Sendable {
+    /// Context available to every `Encodable` value through `Encoder.userInfo`.
+    ///
+    /// These values are not written to CBOR bytes unless custom `Encodable` code
+    /// uses them. Values must conform to `Sendable` so the encoder can be shared
+    /// across concurrency domains.
+    public var userInfo: [CodingUserInfoKey: any Sendable]
+
     /// Create an encoder.
-    public init() {}
+    public init() {
+        self.userInfo = [:]
+    }
+
+    /// Create an encoder with context for custom `Encodable` implementations.
+    public init(userInfo: [CodingUserInfoKey: any Sendable]) {
+        self.userInfo = userInfo
+    }
 
     /// Encode a value to CBOR bytes.
     public func encode<T: Encodable>(_ value: T) throws -> [UInt8] {
@@ -45,7 +59,11 @@ public struct CBOREncoder: Sendable {
             return out
         }
         #endif
-        let encoder = _CBOREncoder()
+        // Encoder.userInfo is specified as [CodingUserInfoKey: Any]. Convert
+        // once per encode, then share that dictionary with all nested encoders.
+        let protocolUserInfo: [CodingUserInfoKey: Any] =
+            userInfo.isEmpty ? [:] : userInfo.mapValues { $0 as Any }
+        let encoder = _CBOREncoder(userInfo: protocolUserInfo)
         try value.encode(to: encoder)
         encoder.write(to: &out)
         return out
@@ -103,7 +121,7 @@ private func cborFromSigned(_ value: Int64) -> CBOR {
 
 /// Encode a nested `Encodable` value into a node, special-casing `Data` and `Date`.
 private func boxNode<T: Encodable>(
-    _ value: T, codingPath: [any CodingKey]
+    _ value: T, codingPath: [any CodingKey], userInfo: [CodingUserInfoKey: Any]
 ) throws -> EncodingNode {
     #if FoundationSupport
     if T.self == Data.self {
@@ -113,7 +131,7 @@ private func boxNode<T: Encodable>(
         return .date(value as! Date)
     }
     #endif
-    let encoder = _CBOREncoder(codingPath: codingPath)
+    let encoder = _CBOREncoder(codingPath: codingPath, userInfo: userInfo)
     try value.encode(to: encoder)
     return encoder.asNode
 }
@@ -170,12 +188,13 @@ private func writeMap(
 
 private final class _CBOREncoder: Encoder {
     var codingPath: [any CodingKey]
-    var userInfo: [CodingUserInfoKey: Any] { [:] }
+    let userInfo: [CodingUserInfoKey: Any]
 
     private var topContainer: (any EncodingContainerNode)?
 
-    init(codingPath: [any CodingKey] = []) {
+    init(codingPath: [any CodingKey] = [], userInfo: [CodingUserInfoKey: Any]) {
         self.codingPath = codingPath
+        self.userInfo = userInfo
     }
 
     /// This encoder's result as a node (for nesting), or `null` if nothing was encoded.
@@ -193,19 +212,19 @@ private final class _CBOREncoder: Encoder {
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) -> KeyedEncodingContainer<Key> {
-        let container = KeyedContainer<Key>(codingPath: codingPath)
+        let container = KeyedContainer<Key>(codingPath: codingPath, userInfo: userInfo)
         topContainer = container
         return KeyedEncodingContainer(container)
     }
 
     func unkeyedContainer() -> any UnkeyedEncodingContainer {
-        let container = UnkeyedContainer(codingPath: codingPath)
+        let container = UnkeyedContainer(codingPath: codingPath, userInfo: userInfo)
         topContainer = container
         return container
     }
 
     func singleValueContainer() -> any SingleValueEncodingContainer {
-        let container = SingleValueContainer(codingPath: codingPath)
+        let container = SingleValueContainer(codingPath: codingPath, userInfo: userInfo)
         topContainer = container
         return container
     }
@@ -224,10 +243,12 @@ private final class EncoderNode: EncodingContainerNode {
 
 private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtocol, EncodingContainerNode {
     var codingPath: [any CodingKey]
+    let userInfo: [CodingUserInfoKey: Any]
     private var storage: [(key: CBOR, node: EncodingNode)] = []
 
-    init(codingPath: [any CodingKey]) {
+    init(codingPath: [any CodingKey], userInfo: [CodingUserInfoKey: Any]) {
         self.codingPath = codingPath
+        self.userInfo = userInfo
     }
 
     func write(to out: inout [UInt8]) {
@@ -260,19 +281,19 @@ private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtoc
     func encode(_ value: UInt64, forKey key: Key) { append(.scalar(.unsignedInt(value)), for: key) }
 
     func encode<T: Encodable>(_ value: T, forKey key: Key) throws {
-        append(try boxNode(value, codingPath: codingPath + [key]), for: key)
+        append(try boxNode(value, codingPath: codingPath + [key], userInfo: userInfo), for: key)
     }
 
     func nestedContainer<NestedKey: CodingKey>(
         keyedBy keyType: NestedKey.Type, forKey key: Key
     ) -> KeyedEncodingContainer<NestedKey> {
-        let container = KeyedContainer<NestedKey>(codingPath: codingPath + [key])
+        let container = KeyedContainer<NestedKey>(codingPath: codingPath + [key], userInfo: userInfo)
         append(.container(container), for: key)
         return KeyedEncodingContainer(container)
     }
 
     func nestedUnkeyedContainer(forKey key: Key) -> any UnkeyedEncodingContainer {
-        let container = UnkeyedContainer(codingPath: codingPath + [key])
+        let container = UnkeyedContainer(codingPath: codingPath + [key], userInfo: userInfo)
         append(.container(container), for: key)
         return container
     }
@@ -287,13 +308,13 @@ private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtoc
         //
         // The decoder never had this problem because it reads the `"super"`
         // text key straight out of the map. This writes it the same way.
-        let encoder = _CBOREncoder(codingPath: codingPath)
+        let encoder = _CBOREncoder(codingPath: codingPath, userInfo: userInfo)
         append(.container(EncoderNode(encoder)), forName: "super")
         return encoder
     }
 
     func superEncoder(forKey key: Key) -> any Encoder {
-        let encoder = _CBOREncoder(codingPath: codingPath + [key])
+        let encoder = _CBOREncoder(codingPath: codingPath + [key], userInfo: userInfo)
         append(.container(EncoderNode(encoder)), for: key)
         return encoder
     }
@@ -303,10 +324,12 @@ private final class KeyedContainer<Key: CodingKey>: KeyedEncodingContainerProtoc
 
 private final class UnkeyedContainer: UnkeyedEncodingContainer, EncodingContainerNode {
     var codingPath: [any CodingKey]
+    let userInfo: [CodingUserInfoKey: Any]
     private var storage: [EncodingNode] = []
 
-    init(codingPath: [any CodingKey]) {
+    init(codingPath: [any CodingKey], userInfo: [CodingUserInfoKey: Any]) {
         self.codingPath = codingPath
+        self.userInfo = userInfo
     }
 
     var count: Int { storage.count }
@@ -335,25 +358,25 @@ private final class UnkeyedContainer: UnkeyedEncodingContainer, EncodingContaine
     func encode(_ value: UInt64) { storage.append(.scalar(.unsignedInt(value))) }
 
     func encode<T: Encodable>(_ value: T) throws {
-        storage.append(try boxNode(value, codingPath: codingPath))
+        storage.append(try boxNode(value, codingPath: codingPath, userInfo: userInfo))
     }
 
     func nestedContainer<NestedKey: CodingKey>(
         keyedBy keyType: NestedKey.Type
     ) -> KeyedEncodingContainer<NestedKey> {
-        let container = KeyedContainer<NestedKey>(codingPath: codingPath)
+        let container = KeyedContainer<NestedKey>(codingPath: codingPath, userInfo: userInfo)
         storage.append(.container(container))
         return KeyedEncodingContainer(container)
     }
 
     func nestedUnkeyedContainer() -> any UnkeyedEncodingContainer {
-        let container = UnkeyedContainer(codingPath: codingPath)
+        let container = UnkeyedContainer(codingPath: codingPath, userInfo: userInfo)
         storage.append(.container(container))
         return container
     }
 
     func superEncoder() -> any Encoder {
-        let encoder = _CBOREncoder(codingPath: codingPath)
+        let encoder = _CBOREncoder(codingPath: codingPath, userInfo: userInfo)
         storage.append(.container(EncoderNode(encoder)))
         return encoder
     }
@@ -363,10 +386,12 @@ private final class UnkeyedContainer: UnkeyedEncodingContainer, EncodingContaine
 
 private final class SingleValueContainer: SingleValueEncodingContainer, EncodingContainerNode {
     var codingPath: [any CodingKey]
+    let userInfo: [CodingUserInfoKey: Any]
     private var node: EncodingNode = .scalar(.null)
 
-    init(codingPath: [any CodingKey]) {
+    init(codingPath: [any CodingKey], userInfo: [CodingUserInfoKey: Any]) {
         self.codingPath = codingPath
+        self.userInfo = userInfo
     }
 
     func write(to out: inout [UInt8]) {
@@ -390,6 +415,6 @@ private final class SingleValueContainer: SingleValueEncodingContainer, Encoding
     func encode(_ value: UInt64) { node = .scalar(.unsignedInt(value)) }
 
     func encode<T: Encodable>(_ value: T) throws {
-        node = try boxNode(value, codingPath: codingPath)
+        node = try boxNode(value, codingPath: codingPath, userInfo: userInfo)
     }
 }

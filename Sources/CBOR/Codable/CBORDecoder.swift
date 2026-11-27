@@ -25,6 +25,12 @@ public struct CBORDecoder: Sendable {
     /// Options applied when reading the CBOR bytes.
     public var options: CBORDecodingOptions
 
+    /// Context available to every `Decodable` value through `Decoder.userInfo`.
+    ///
+    /// These values are not read from CBOR bytes. Values must conform to
+    /// `Sendable` so the decoder can be shared across concurrency domains.
+    public var userInfo: [CodingUserInfoKey: any Sendable]
+
     /// Maximum number of nested `Decodable.init(from:)` calls. Defaults to `128`.
     ///
     /// This is separate from ``CBORDecodingOptions/maximumDepth``: a single
@@ -41,6 +47,17 @@ public struct CBORDecoder: Sendable {
     public init(options: CBORDecodingOptions = .default, maximumCodableDepth: Int = 128) {
         self.options = options
         self.maximumCodableDepth = maximumCodableDepth
+        self.userInfo = [:]
+    }
+
+    /// Create a decoder with context for custom `Decodable` implementations.
+    public init(
+        options: CBORDecodingOptions = .default,
+        maximumCodableDepth: Int = 128,
+        userInfo: [CodingUserInfoKey: any Sendable]
+    ) {
+        self.init(options: options, maximumCodableDepth: maximumCodableDepth)
+        self.userInfo = userInfo
     }
 
     /// Decode a value of the given type from CBOR bytes.
@@ -56,7 +73,14 @@ public struct CBORDecoder: Sendable {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, fromValue cbor: CBOR) throws -> T {
-        try _CBORDecoder(cbor: cbor, options: options, maximumCodableDepth: maximumCodableDepth)
+        // Decoder.userInfo is specified as [CodingUserInfoKey: Any]. Convert
+        // once per decode, then share that dictionary with all child decoders.
+        let protocolUserInfo: [CodingUserInfoKey: Any] =
+            userInfo.isEmpty ? [:] : userInfo.mapValues { $0 as Any }
+        return try _CBORDecoder(
+            cbor: cbor, options: options, maximumCodableDepth: maximumCodableDepth,
+            userInfo: protocolUserInfo
+        )
             .unbox(as: type)
     }
 }
@@ -75,7 +99,7 @@ private final class _CBORDecoder: Decoder {
     let options: CBORDecodingOptions
     let maximumCodableDepth: Int
     private var activeCodableDepth: Int
-    var userInfo: [CodingUserInfoKey: Any] { [:] }
+    let userInfo: [CodingUserInfoKey: Any]
 
     // The coding path is held as a link to the parent decoder plus this decoder's
     // own step, and only assembled into an array when something asks for it — an
@@ -89,12 +113,14 @@ private final class _CBORDecoder: Decoder {
         cbor: CBOR,
         options: CBORDecodingOptions,
         maximumCodableDepth: Int,
+        userInfo: [CodingUserInfoKey: Any],
         parent: _CBORDecoder? = nil,
         component: PathComponent = .root
     ) {
         self.cbor = cbor
         self.options = options
         self.maximumCodableDepth = maximumCodableDepth
+        self.userInfo = userInfo
         self.activeCodableDepth = parent?.activeCodableDepth ?? 0
         self.parent = parent
         self.component = component
@@ -118,7 +144,8 @@ private final class _CBORDecoder: Decoder {
     func child(_ value: CBOR, at component: PathComponent) -> _CBORDecoder {
         _CBORDecoder(
             cbor: value, options: options,
-            maximumCodableDepth: maximumCodableDepth, parent: self, component: component
+            maximumCodableDepth: maximumCodableDepth, userInfo: userInfo,
+            parent: self, component: component
         )
     }
 
