@@ -5,27 +5,20 @@ let fuzzTargets: @Sendable () -> Void = {
     // Encoding is a fixed point: once a value has been through one
     // encode/decode cycle, further cycles must not change its bytes.
     //
-    // Two weaker-looking properties are deliberately NOT asserted, because both
-    // have legitimate counterexamples:
+    // The original bytes need not be reproduced because non-shortest integers
+    // and unsorted maps are legal inputs. The decoded value, however, must stay
+    // equivalent under RFC 8949 map-key rules after re-encoding.
     //
-    //   encode(decode(x)) == x   Non-canonical encodings are legal CBOR (an
-    //                            integer stored wider than it needs to be,
-    //                            unsorted map keys); re-encoding normalises them.
-    //
-    //   decode(x) == decode(encode(decode(x)))
-    //                            Fails on NaN payloads, since NaN != NaN. Fuzzing
-    //                            found this within seconds via the input
-    //                            `fa ffff9f01`, a single-precision NaN.
-    //
-    // Comparing the *encodings* of two successive cycles sidesteps both: the
-    // first cycle normalises, and NaN encodes to stable bytes even though it
-    // never compares equal to itself.
+    // NaN significands are part of that equality, so NaNs round-trip as well.
     FuzzTarget("CBORRoundTrip") { bytes in
         guard let first = try? CBOR.decode(bytes) else { return }
         let once = first.encode()
 
         guard let second = try? CBOR.decode(once) else {
             fatalError("re-encoding a decoded value produced bytes that no longer decode")
+        }
+        guard first == second else {
+            fatalError("encoding changed the decoded CBOR value")
         }
         let twice = second.encode()
 

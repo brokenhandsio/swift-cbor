@@ -22,5 +22,19 @@ discoveries shared a directory.
   protecting for the same reason: it is the input that makes the deep-nesting
   target productive from the first run, and one byte of input is one level of
   nesting.
+- `CBORDeepMapKeys/many-deep-keys` — a short text seed that the target expands
+  into a map with many distinct keys nested at least 17 levels deep. It exercises the
+  key shape that once made map decoding quadratic.
+- `CBORDecode/{unicode-distinct-keys,signed-zero-duplicate,cross-width-duplicate,nan-cross-width-duplicate}`
+  and their `CBORRoundTrip` counterparts — byte-distinct Unicode keys and
+  RFC 8949 float-key equivalence cases.
+- `CBORDeepNesting/large-declared-{maps,arrays}` — 512 nested containers that
+  each claim 1024 entries, then end abruptly. They exercise the shared
+  reservation budget on a small input.
+- `{CBORDecode,CBORRoundTrip,CBORCodable}/split-utf8-*` and `valid-utf8-chunks`
+  — indefinite text strings whose chunk boundaries respectively split a UTF-8
+  code point or fall between complete code points.
+- `CBORCodable/recursive-arrays-129` — 129 nested one-element arrays followed by
+  an empty array; the Codable recursion guard should reject it with an error.
 
 Adding more is just a matter of dropping files in.

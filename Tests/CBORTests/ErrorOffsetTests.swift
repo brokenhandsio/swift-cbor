@@ -41,11 +41,29 @@ struct ErrorOffsetTests {
         }
     }
 
-    @Test("invalid UTF-8 across chunks points at the whole string")
-    func chunkedUTF8() {
-        // [(_ "\u{ff}")]: the string at offset 1, its only chunk at 2.
+    @Test("invalid UTF-8 in an indefinite text string points at its chunk", arguments: [
+        ("817f61ffff", 2),       // one invalid chunk nested in an array
+        ("7f61c361a9ff", 1),     // a valid code point split across chunks
+        ("7f616161ffff", 3),     // a valid first chunk, then an invalid one
+        ("7f62f09f629891ff", 1), // a four-byte code point split in half
+    ])
+    func chunkedUTF8(hex: String, offset: Int) {
+        #expect(throws: CBORError.invalidUTF8(offset: offset)) {
+            try CBOR.decode(bytes(fromHex: hex))
+        }
+    }
+
+    @Test("chunk offset is relative to an input slice and survives decodeFirst")
+    func chunkedUTF8Slice() {
+        let padded: [UInt8] = [0xaa, 0xbb] + bytes(fromHex: "7f61c361a9ff")
         #expect(throws: CBORError.invalidUTF8(offset: 1)) {
-            try CBOR.decode(bytes(fromHex: "817f61ffff"))
+            try CBOR.decode(padded[2...])
+        }
+        #expect(throws: CBORError.invalidUTF8(offset: 1)) {
+            try CBOR.decodeFirst(padded[2...])
+        }
+        #expect(throws: CBORError.invalidUTF8(offset: 1)) {
+            try CBORDecoder().decode(String.self, from: padded[2...])
         }
     }
 

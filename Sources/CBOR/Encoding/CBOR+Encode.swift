@@ -3,13 +3,14 @@ extension CBOR {
     ///
     /// Encoding never fails: every `CBOR` value has a byte representation.
     ///
-    /// The output is deterministic: the same value always encodes to the same
+    /// The output is stable: the same value always encodes to the same
     /// bytes. Integers, lengths and tags use their shortest form, lengths are always
     /// definite, and map keys are sorted into bytewise lexicographic order of their
     /// encodings (RFC 8949 §4.2.1). Floats keep the width of their case
     /// (``CBOR/half(bitPattern:)``, ``CBOR/float(_:)`` or ``CBOR/double(_:)``) rather
     /// than being narrowed, so a value that §4.2.1 would shorten, such as
-    /// `.double(1.5)`, is written at its declared width.
+    /// `.double(1.5)`, is written at its declared width. This is not RFC 8949
+    /// core deterministic encoding for floating-point values.
     ///
     /// Nested containers are walked with an explicit work stack rather than native
     /// recursion, so encoding a deeply nested value uses O(1) native stack and

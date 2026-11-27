@@ -24,8 +24,7 @@ private let allowDuplicates = CBORDecodingOptions(rejectDuplicateMapKeys: false)
 struct FloatKeyIdentityTests {
     @Test("NaN values of the same bit pattern are the same CBOR value")
     func nanEqualsItself() {
-        // IEEE says no; CBOR's data model says yes, because the two are
-        // indistinguishable once encoded.
+        // IEEE says no; CBOR compares NaN significands for map keys.
         #expect(CBOR.double(.nan) == CBOR.double(.nan))
         #expect(CBOR.float(.nan) == CBOR.float(.nan))
         #expect(CBOR.half(bitPattern: 0x7e00) == CBOR.half(bitPattern: 0x7e00))
@@ -74,8 +73,7 @@ struct FloatKeyIdentityTests {
 
     @Test("Distinct NaN payloads stay distinct")
     func distinctPayloadsAreDistinctKeys() {
-        // Different bit patterns encode differently, so they are genuinely
-        // different keys and the sort still has a total order.
+        // Different significands are different keys.
         let a = CBOR.double(Double(bitPattern: 0x7ff8_0000_0000_0001))
         let b = CBOR.double(Double(bitPattern: 0x7ff8_0000_0000_0002))
         #expect(a != b)
@@ -86,21 +84,17 @@ struct FloatKeyIdentityTests {
         #expect(map.count == 2)
     }
 
-    @Test("Positive and negative zero are different keys")
-    func signedZerosAreDistinct() {
-        // They encode differently (0xfb 0000… vs 0xfb 8000…), so treating them
-        // as one key would reintroduce exactly the same ambiguity.
-        #expect(CBOR.double(0.0) != CBOR.double(-0.0))
+    @Test("Positive and negative zero are equivalent keys")
+    func signedZerosAreEqual() {
+        #expect(CBOR.double(0.0) == CBOR.double(-0.0))
         #expect(CBOR.double(0.0).encode() != CBOR.double(-0.0).encode())
+        #expect(CBOR.double(0.0).hashValue == CBOR.double(-0.0).hashValue)
     }
 
     @Test("Hashable contract: equal values hash equally")
     func hashableContract() {
-        // `==` is hand-written but `hash(into:)` is synthesized, so this pairing
-        // is load-bearing: it holds only because the standard library hashes a
-        // float as a pure function of its bit pattern. If that ever changed,
-        // equal CBOR values could hash differently and maps would silently lose
-        // entries — so assert it rather than assume it.
+        // `==` and `hash(into:)` are both hand-written. Equal NaN values must
+        // hash equally so dictionaries can find them again.
         let payload: UInt64 = 0x7ff8_0000_0000_0001
         let a = CBOR.double(Double(bitPattern: payload))
         let b = CBOR.double(Double(bitPattern: payload))
@@ -112,11 +106,11 @@ struct FloatKeyIdentityTests {
         #expect(CBOR.half(bitPattern: 0x7e00).hashValue == CBOR.half(bitPattern: 0x7e00).hashValue)
     }
 
-    @Test("Equal floats of the same width remain equal")
+    @Test("Equal floats of different widths are equivalent")
     func ordinaryFloatsUnaffected() {
         #expect(CBOR.double(1.5) == CBOR.double(1.5))
         #expect(CBOR.double(1.5) != CBOR.double(2.5))
-        // Different widths are different CBOR items even at the same value.
-        #expect(CBOR.double(1.5) != CBOR.float(1.5))
+        #expect(CBOR.double(1.5) == CBOR.float(1.5))
+        #expect(CBOR.float(1.5) == CBOR.half(bitPattern: 0x3e00))
     }
 }

@@ -38,6 +38,14 @@ struct Everything: Codable {
     var lookup: [String: Int16]
 }
 
+/// Drives recursion through the Codable bridge on nested CBOR arrays.
+private struct RecursiveArray: Decodable {
+    init(from decoder: any Decoder) throws {
+        var array = try decoder.unkeyedContainer()
+        if !array.isAtEnd { _ = try array.decode(Self.self) }
+    }
+}
+
 let fuzzTargets: @Sendable () -> Void = {
     // The `Codable` bridge, which the other targets never touch: they go
     // straight to the parser, so `CBORDecoder` and `CBOREncoder` sat at 0
@@ -54,6 +62,13 @@ let fuzzTargets: @Sendable () -> Void = {
         // decoded values.
         let decoder = CBORDecoder()
         let encoder = CBOREncoder()
+
+        // Array-shaped input exercises the Codable recursion limit. Everything
+        // starts with a map, so this branch does not reduce its useful coverage.
+        if !bytes.isEmpty, bytes[0] >> 5 == 4 {
+            _ = try? decoder.decode(RecursiveArray.self, from: bytes)
+            return
+        }
 
         // Most inputs are not a valid `Everything`; that rejection is a normal
         // thrown error and not interesting.

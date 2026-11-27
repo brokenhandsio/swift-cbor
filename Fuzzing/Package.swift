@@ -67,6 +67,21 @@ let package = Package(
         ),
 
         .executableTarget(
+            name: "CBORDeepMapKeys",
+            dependencies: ["CBORDeepMapKeysTarget"],
+            path: "FuzzTargets/CBORDeepMapKeysShim"
+        ),
+        .target(
+            name: "CBORDeepMapKeysTarget",
+            dependencies: [
+                .product(name: "Fuzzing", package: "swift-fuzz"),
+                .product(name: "CBOR", package: "swift-cbor"),
+            ],
+            path: "FuzzTargets/CBORDeepMapKeys",
+            plugins: [.plugin(name: "FuzzTargetPlugin", package: "swift-fuzz")]
+        ),
+
+        .executableTarget(
             name: "CBORCodable",
             dependencies: ["CBORCodableTarget"],
             path: "FuzzTargets/CBORCodableShim"

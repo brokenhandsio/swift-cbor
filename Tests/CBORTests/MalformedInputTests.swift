@@ -113,11 +113,27 @@ struct MalformedInputTests {
         #expect(try CBOR.decode(bytes(fromHex: "bf01020103ff"), options: options) == [1: 3])
     }
 
-    @Test("keys that differ only in float sign or type are not duplicates")
+    @Test("integer and float keys remain distinct")
     func distinctFloatKeys() throws {
-        // {0.0: 1, -0.0: 2} as halves, then {1: 1, 1.0: 2}.
-        #expect(try CBOR.decode(bytes(fromHex: "a2f9000001f9800002")).mapValue?.count == 2)
+        // {1: 1, 1.0: 2}.
         #expect(try CBOR.decode(bytes(fromHex: "a20101f93c0002")).mapValue?.count == 2)
+    }
+
+    @Test("large declared counts in nested truncated containers throw")
+    func nestedDeclaredCounts() {
+        // Each map declares 1024 pairs but only supplies a key and another map.
+        // This small input previously reserved 1024 dictionary slots per frame.
+        let mapHead: [UInt8] = [0xb9, 0x04, 0x00, 0x00]
+        let maps = Array(repeating: mapHead, count: 512).flatMap { $0 }
+        #expect(throws: CBORError.unexpectedEnd(offset: maps.count)) {
+            try CBOR.decode(maps)
+        }
+
+        let arrayHead: [UInt8] = [0x99, 0x04, 0x00]
+        let arrays = Array(repeating: arrayHead, count: 512).flatMap { $0 }
+        #expect(throws: CBORError.unexpectedEnd(offset: arrays.count)) {
+            try CBOR.decode(arrays)
+        }
     }
 
     @Test("the Codable decoder rejects duplicate keys by default")

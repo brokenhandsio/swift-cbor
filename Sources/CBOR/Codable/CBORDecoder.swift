@@ -25,12 +25,46 @@ public struct CBORDecoder: Sendable {
     /// Options applied when reading the CBOR bytes.
     public var options: CBORDecodingOptions
 
+    /// Context available to every `Decodable` value through `Decoder.userInfo`.
+    ///
+    /// These values are not read from CBOR bytes. Values must conform to
+    /// `Sendable` so the decoder can be shared across concurrency domains.
+    public var userInfo: [CodingUserInfoKey: any Sendable]
+
+    /// Maximum number of nested `Decodable.init(from:)` calls. Defaults to `128`.
+    ///
+    /// This is separate from ``CBORDecodingOptions/maximumDepth``: a single
+    /// recursive Swift model can use several stack frames per CBOR container.
+    /// Exceeding this limit throws `DecodingError.dataCorrupted`. Raising it can
+    /// exhaust a small thread stack, depending on the decoded type and build.
+    public var maximumCodableDepth: Int
+
     /// Create a decoder.
     ///
-    /// - Parameter options: How to read the CBOR bytes: the depth limit and
-    ///   whether duplicate map keys are an error.
+    /// - Parameter options: How to parse the CBOR bytes.
     public init(options: CBORDecodingOptions = .default) {
+        self.init(options: options, maximumCodableDepth: 128)
+    }
+
+    /// Create a decoder with a custom limit on nested `Decodable` calls.
+    ///
+    /// - Parameters:
+    ///   - options: How to parse the CBOR bytes.
+    ///   - maximumCodableDepth: Maximum nested generic `Decodable` calls.
+    public init(options: CBORDecodingOptions = .default, maximumCodableDepth: Int) {
         self.options = options
+        self.maximumCodableDepth = maximumCodableDepth
+        self.userInfo = [:]
+    }
+
+    /// Create a decoder with context for custom `Decodable` implementations.
+    public init(
+        options: CBORDecodingOptions = .default,
+        maximumCodableDepth: Int = 128,
+        userInfo: [CodingUserInfoKey: any Sendable]
+    ) {
+        self.init(options: options, maximumCodableDepth: maximumCodableDepth)
+        self.userInfo = userInfo
     }
 
     /// Decode a value of the given type from CBOR bytes.
@@ -46,7 +80,15 @@ public struct CBORDecoder: Sendable {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, fromValue cbor: CBOR) throws -> T {
-        try _CBORDecoder(cbor: cbor, options: options).unbox(as: type)
+        // Decoder.userInfo is specified as [CodingUserInfoKey: Any]. Convert
+        // once per decode, then share that dictionary with all child decoders.
+        let protocolUserInfo: [CodingUserInfoKey: Any] =
+            userInfo.isEmpty ? [:] : userInfo.mapValues { $0 as Any }
+        return try _CBORDecoder(
+            cbor: cbor, options: options, maximumCodableDepth: maximumCodableDepth,
+            userInfo: protocolUserInfo
+        )
+            .unbox(as: type)
     }
 }
 
@@ -62,7 +104,9 @@ private enum PathComponent {
 private final class _CBORDecoder: Decoder {
     let cbor: CBOR
     let options: CBORDecodingOptions
-    var userInfo: [CodingUserInfoKey: Any] { [:] }
+    let maximumCodableDepth: Int
+    private var activeCodableDepth: Int
+    let userInfo: [CodingUserInfoKey: Any]
 
     // The coding path is held as a link to the parent decoder plus this decoder's
     // own step, and only assembled into an array when something asks for it — an
@@ -72,9 +116,19 @@ private final class _CBORDecoder: Decoder {
     private let parent: _CBORDecoder?
     private let component: PathComponent
 
-    init(cbor: CBOR, options: CBORDecodingOptions, parent: _CBORDecoder? = nil, component: PathComponent = .root) {
+    init(
+        cbor: CBOR,
+        options: CBORDecodingOptions,
+        maximumCodableDepth: Int,
+        userInfo: [CodingUserInfoKey: Any],
+        parent: _CBORDecoder? = nil,
+        component: PathComponent = .root
+    ) {
         self.cbor = cbor
         self.options = options
+        self.maximumCodableDepth = maximumCodableDepth
+        self.userInfo = userInfo
+        self.activeCodableDepth = parent?.activeCodableDepth ?? 0
         self.parent = parent
         self.component = component
     }
@@ -95,7 +149,11 @@ private final class _CBORDecoder: Decoder {
 
     /// A decoder for `value`, reached from this one by `component`.
     func child(_ value: CBOR, at component: PathComponent) -> _CBORDecoder {
-        _CBORDecoder(cbor: value, options: options, parent: self, component: component)
+        _CBORDecoder(
+            cbor: value, options: options,
+            maximumCodableDepth: maximumCodableDepth, userInfo: userInfo,
+            parent: self, component: component
+        )
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
@@ -133,6 +191,14 @@ private final class _CBORDecoder: Decoder {
             return Date(timeIntervalSince1970: seconds) as! T
         }
         #endif
+        guard activeCodableDepth < maximumCodableDepth else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: codingPath,
+                debugDescription: "Decodable nesting exceeds the limit of \(maximumCodableDepth)."
+            ))
+        }
+        activeCodableDepth += 1
+        defer { activeCodableDepth -= 1 }
         return try T(from: self)
     }
 }
@@ -291,13 +357,26 @@ private struct KeyedContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
     var codingPath: [any CodingKey] { decoder.codingPath }
 
     var allKeys: [Key] {
-        map.keys.compactMap { key in
+        var keys: [Key] = []
+        var seen: Set<String> = []
+        // Text keys take precedence over integer keys with the same CodingKey.
+        for key in map.keys {
+            guard case .textString(let string) = key,
+                  let codingKey = Key(stringValue: string),
+                  seen.insert(codingKey.stringValue).inserted else { continue }
+            keys.append(codingKey)
+        }
+        for key in map.keys {
             switch key {
-            case .textString(let string): return Key(stringValue: string)
-            case .unsignedInt, .negativeInt: return key.intValue.flatMap(Key.init(intValue:))
-            default: return nil
+            case .unsignedInt, .negativeInt:
+                guard let integer = key.intValue,
+                      let codingKey = Key(intValue: integer),
+                      seen.insert(codingKey.stringValue).inserted else { continue }
+                keys.append(codingKey)
+            default: break
             }
         }
+        return keys
     }
 
     /// The value stored under `key`: by its text form, which is what the encoder

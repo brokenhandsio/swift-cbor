@@ -90,6 +90,9 @@ enum CBORParser {
         let maxDepth = min(options.maximumDepth, CBORDecodingOptions.maximumSupportedDepth)
         let rejectDuplicates = options.rejectDuplicateMapKeys
         var stack: [Frame] = []
+        // A count is untrusted until its children arrive. A single budget keeps
+        // eager reservations across all open frames proportional to input size.
+        var reservationBudget = span.count
 
         while true {
             // A `break` (0xFF) closes the innermost indefinite-length container.
@@ -164,7 +167,9 @@ enum CBORParser {
                 } else {
                     var frame = Frame(kind: .array, start: start)
                     frame.remaining = count
-                    frame.items.reserveCapacity(min(count, 1024))
+                    let capacity = min(count, min(1024, reservationBudget))
+                    frame.items.reserveCapacity(capacity)
+                    reservationBudget -= capacity
                     stack.append(frame)
                     continue
                 }
@@ -180,7 +185,9 @@ enum CBORParser {
                 } else {
                     var frame = Frame(kind: .map, start: start)
                     frame.remaining = count
-                    frame.pairs.reserveCapacity(min(count, 1024))
+                    let capacity = min(count, min(1024, reservationBudget))
+                    frame.pairs.reserveCapacity(capacity)
+                    reservationBudget -= capacity
                     stack.append(frame)
                     continue
                 }
@@ -404,7 +411,7 @@ enum CBORParser {
     /// Build a `String` from `bytes`, or return `nil` if they are not well-formed
     /// UTF-8.
     @inline(__always)
-    private static func validatedString(_ bytes: [UInt8]) -> String? {
+    private static func validatedString(_ bytes: some Collection<UInt8>) -> String? {
         if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
             return String(validating: bytes, as: UTF8.self)
         }
@@ -421,7 +428,7 @@ enum CBORParser {
     ///
     /// Internal rather than private so tests can exercise it on OSes where the
     /// `#available` check above never reaches it.
-    static func validatedStringBackDeployed(_ bytes: [UInt8]) -> String? {
+    static func validatedStringBackDeployed(_ bytes: some Collection<UInt8>) -> String? {
         let string = String(decoding: bytes, as: UTF8.self)
         return string.utf8.elementsEqual(bytes) ? string : nil
     }
@@ -466,7 +473,14 @@ enum CBORParser {
                 throw CBORError.invalidIndefiniteLength(offset: chunk)
             }
             let length = try readArgument(initialByte & 0x1f, span, &offset, item: chunk)
+            let chunkStart = bytes.count
             try appendBytes(length, span, &offset, item: chunk, source: source, to: &bytes)
+            // Each definite text chunk must be valid UTF-8 on its own. A code
+            // point split across two chunks is invalid even if their concatenation
+            // is valid (RFC 8949 §3.2.3).
+            guard validatedString(bytes[chunkStart...]) != nil else {
+                throw CBORError.invalidUTF8(offset: chunk)
+            }
         }
         guard let string = validatedString(bytes) else {
             throw CBORError.invalidUTF8(offset: start)

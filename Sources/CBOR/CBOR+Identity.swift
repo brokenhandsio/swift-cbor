@@ -1,35 +1,19 @@
 // MARK: - Value identity
 //
-// `==` is written out rather than synthesized so that the three float cases
-// compare by bit pattern instead of by IEEE equality. `hash(into:)` is written
-// out so that hashing a deeply nested value cannot overflow the stack.
+// `==` follows RFC 8949 §5.6.1 map-key equivalence. `hash(into:)` uses the same
+// rules and walks nested values without overflowing the stack.
 //
-// Synthesis would give `.double(.nan) != .double(.nan)`, which is right for
-// arithmetic and wrong for a data model. Two CBOR items are the same item when
-// they encode to the same bytes, and a NaN payload encodes to exactly itself.
-// Under IEEE semantics a `[CBOR: CBOR]` would accept the same NaN key twice —
-// the map then holds two entries whose encoded keys are byte-identical, so the
-// deterministic key sort (RFC 8949 §4.2.1, bytewise over encoded keys) has no
-// total order to work with. The same map could encode two different ways, and
-// the output contained a duplicate key, which is not valid deterministic CBOR
-// at all. Found by fuzzing; see FloatKeyIdentityTests.
-//
-// Two consequences worth knowing:
-//
-// - Distinct NaN payloads stay distinct, because their bit patterns and
-//   therefore their encodings differ.
-// - `0.0` and `-0.0` are now different keys. They encode differently
-//   (`0xfb 0000…` vs `0xfb 8000…`), so collapsing them would reintroduce the
-//   same ambiguity from the other direction.
+// Swift String equality normalizes Unicode, while CBOR text compares UTF-8
+// bytes. IEEE equality makes NaN unequal to itself, while CBOR compares NaN
+// significands. CBOR also equates signed zero and equal floats of any width.
 
 extension CBOR {
-    /// Whether two values are the same CBOR data item.
+    /// Whether two values are equivalent in the CBOR generic data model.
     ///
-    /// Floats compare by bit pattern rather than by IEEE 754 equality: a NaN
-    /// equals an identical NaN, `0.0` and `-0.0` are different, and ``half(bitPattern:)``,
-    /// ``float(_:)`` and ``double(_:)`` never equal one another, even for the same
-    /// number. Nested values are compared iteratively, so comparing deeply nested
-    /// values cannot overflow the stack.
+    /// Text compares by UTF-8 bytes. Floats compare numerically across widths,
+    /// with signed zero equal and NaNs compared by their zero-extended
+    /// significands. Equal values can retain different encodings. Nested values
+    /// are compared iteratively, so deep comparisons cannot overflow the stack.
     public static func == (lhs: CBOR, rhs: CBOR) -> Bool {
         // Fast path. Scalars are the overwhelming majority of comparisons —
         // every map-key lookup during decoding lands here — so they must not
@@ -39,15 +23,15 @@ extension CBOR {
         case (.unsignedInt(let a), .unsignedInt(let b)): return a == b
         case (.negativeInt(let a), .negativeInt(let b)): return a == b
         case (.byteString(let a), .byteString(let b)): return a == b
-        case (.textString(let a), .textString(let b)): return a == b
+        case (.textString(let a), .textString(let b)): return a.utf8.elementsEqual(b.utf8)
         case (.simple(let a), .simple(let b)): return a == b
         case (.bool(let a), .bool(let b)): return a == b
         case (.null, .null): return true
         case (.undefined, .undefined): return true
-        // Bit patterns rather than IEEE equality: see the note above.
-        case (.half(let a), .half(let b)): return a == b // already a bit pattern
-        case (.float(let a), .float(let b)): return a.bitPattern == b.bitPattern
-        case (.double(let a), .double(let b)): return a.bitPattern == b.bitPattern
+        case (.half, .half), (.half, .float), (.half, .double),
+             (.float, .half), (.float, .float), (.float, .double),
+             (.double, .half), (.double, .float), (.double, .double):
+            return lhs.floatKey == rhs.floatKey
         case (.array, .array), (.map, .map), (.tagged, .tagged):
             return deepEqual(lhs, rhs)
         default:
@@ -76,7 +60,7 @@ extension CBOR {
                 guard a.count == b.count else { return false }
                 for (key, value) in a {
                     // Looking the key up in `b` hashes it, which is where key
-                    // identity — and therefore the float bit-pattern rule —
+                    // identity — including float and UTF-8 equivalence —
                     // actually gets applied.
                     guard let other = b[key] else { return false }
                     pending.append((value, other))
@@ -93,34 +77,110 @@ extension CBOR {
         return true
     }
 
-    /// Hash the value consistently with `==`.
+    /// Hash the complete value consistently with `==`.
     ///
-    /// Hashing looks only at the first 16 levels of nesting, so it cannot
-    /// overflow the stack. Values that differ only below that depth hash the same,
-    /// and `==` tells them apart.
+    /// Containers are walked with an explicit stack. A fixed depth cutoff would
+    /// make every key with the same prefix collide, allowing a small CBOR map to
+    /// take quadratic time to decode.
     public func hash(into hasher: inout Hasher) {
-        hash(into: &hasher, depthBudget: Self.hashDepthBudget)
+        switch self {
+        case .array, .map, .tagged:
+            hasher.combine(deepHash())
+        default:
+            // Map keys are usually scalars, so they do not need a work stack or
+            // an intermediate Hasher.
+            hashScalar(into: &hasher)
+        }
     }
 
-    /// How far into a value hashing descends.
-    ///
-    /// Synthesized hashing recursed once per level of nesting and overflowed the
-    /// stack somewhere between depth 512 and 1000 — uncomfortably close to the
-    /// default `CBORDecodingOptions.maximumDepth` of 512, and reachable from decoded
-    /// input the moment a caller raises that limit, because the parser stores
-    /// map keys with `pairs[key] = value`.
-    ///
-    /// Bounding the descent fixes that without an explicit work stack. Hashing
-    /// may legitimately look at part of a value rather than all of it: the
-    /// contract is that equal values hash equally, and a bounded projection of
-    /// two equal values is still equal. Values differing only below this depth
-    /// collide, and `==` — which is exact, and iterative — separates them.
-    ///
-    /// 16 is far past anything real CBOR nests keys to, and costs at most 16
-    /// frames.
-    private static let hashDepthBudget = 16
+    /// Finish child hashes before their parent, using O(depth) temporary space.
+    /// A map combines pair hashes commutatively because its iteration order is
+    /// unspecified; arrays and tags preserve their element order.
+    private func deepHash() -> Int {
+        var frames: [HashFrame] = []
+        var work = HashWork.value(self)
 
-    private func hash(into hasher: inout Hasher, depthBudget: Int) {
+        while true {
+            switch work {
+            case .value(let value):
+                switch value {
+                case .array(let elements):
+                    var hasher = Hasher()
+                    hasher.combine(4 as UInt8)
+                    hasher.combine(elements.count)
+                    if let first = elements.first {
+                        frames.append(.array(elements, next: 1, hasher))
+                        work = .value(first)
+                    } else {
+                        work = .digest(hasher.finalize())
+                    }
+                case .map(let entries):
+                    if entries.isEmpty {
+                        var hasher = Hasher()
+                        hasher.combine(5 as UInt8)
+                        hasher.combine(0)
+                        hasher.combine(0)
+                        work = .digest(hasher.finalize())
+                    } else {
+                        let index = entries.startIndex
+                        frames.append(.map(entries, index: index, keyDigest: nil, combined: 0))
+                        work = .value(entries[index].key)
+                    }
+                case .tagged(let tag, let item):
+                    var hasher = Hasher()
+                    hasher.combine(6 as UInt8)
+                    hasher.combine(tag)
+                    frames.append(.tag(hasher))
+                    work = .value(item)
+                default:
+                    var hasher = Hasher()
+                    value.hashScalar(into: &hasher)
+                    work = .digest(hasher.finalize())
+                }
+
+            case .digest(let digest):
+                guard let frame = frames.popLast() else { return digest }
+                switch frame {
+                case .array(let elements, let next, var hasher):
+                    hasher.combine(digest)
+                    if next < elements.count {
+                        frames.append(.array(elements, next: next + 1, hasher))
+                        work = .value(elements[next])
+                    } else {
+                        work = .digest(hasher.finalize())
+                    }
+                case .map(let entries, let index, let keyDigest, let combined):
+                    if let keyDigest {
+                        var pairHasher = Hasher()
+                        pairHasher.combine(keyDigest)
+                        pairHasher.combine(digest)
+                        let updated = combined ^ pairHasher.finalize()
+                        let next = entries.index(after: index)
+                        if next == entries.endIndex {
+                            var hasher = Hasher()
+                            hasher.combine(5 as UInt8)
+                            hasher.combine(entries.count)
+                            hasher.combine(updated)
+                            work = .digest(hasher.finalize())
+                        } else {
+                            frames.append(.map(entries, index: next, keyDigest: nil, combined: updated))
+                            work = .value(entries[next].key)
+                        }
+                    } else {
+                        frames.append(.map(entries, index: index, keyDigest: digest, combined: combined))
+                        work = .value(entries[index].value)
+                    }
+                case .tag(var hasher):
+                    hasher.combine(digest)
+                    work = .digest(hasher.finalize())
+                }
+            }
+        }
+    }
+
+    /// Hash a value with no children. All comparisons in the scalar fast path
+    /// above have matching cases here, including bytewise text and numeric floats.
+    private func hashScalar(into hasher: inout Hasher) {
         switch self {
         case .unsignedInt(let value):
             hasher.combine(0 as UInt8)
@@ -133,7 +193,21 @@ extension CBOR {
             hasher.combine(value)
         case .textString(let value):
             hasher.combine(3 as UInt8)
-            hasher.combine(value)
+            hasher.combine(value.utf8.count)
+            // Combine up to eight UTF-8 bytes at once. Hashing each byte
+            // separately is expensive for maps with many text keys.
+            var chunk: UInt64 = 0
+            var bytesInChunk = 0
+            for byte in value.utf8 {
+                chunk = (chunk << 8) | UInt64(byte)
+                bytesInChunk += 1
+                if bytesInChunk == 8 {
+                    hasher.combine(chunk)
+                    chunk = 0
+                    bytesInChunk = 0
+                }
+            }
+            if bytesInChunk != 0 { hasher.combine(chunk) }
         case .simple(let value):
             hasher.combine(7 as UInt8)
             hasher.combine(value)
@@ -144,47 +218,56 @@ extension CBOR {
             hasher.combine(9 as UInt8)
         case .undefined:
             hasher.combine(10 as UInt8)
-        // Bit patterns, to stay consistent with `==`. The standard library
-        // would do the same except for normalising -0.0 to +0.0, which `==` now
-        // treats as a different value.
-        case .half(let bits):
+        case .half, .float, .double:
             hasher.combine(11 as UInt8)
-            hasher.combine(bits)
-        case .float(let value):
-            hasher.combine(12 as UInt8)
-            hasher.combine(value.bitPattern)
-        case .double(let value):
-            hasher.combine(13 as UInt8)
-            hasher.combine(value.bitPattern)
-
-        case .array(let elements):
-            hasher.combine(4 as UInt8)
-            hasher.combine(elements.count)
-            guard depthBudget > 0 else { return }
-            for element in elements {
-                element.hash(into: &hasher, depthBudget: depthBudget - 1)
-            }
-        case .map(let entries):
-            hasher.combine(5 as UInt8)
-            hasher.combine(entries.count)
-            guard depthBudget > 0 else { return }
-            // Combined commutatively, because a dictionary has no order: two
-            // equal maps must hash the same however they happen to iterate.
-            // This is what `Dictionary.hash(into:)` does, done here so the
-            // depth budget reaches the elements.
-            var commutative = 0
-            for (key, value) in entries {
-                var element = Hasher()
-                key.hash(into: &element, depthBudget: depthBudget - 1)
-                value.hash(into: &element, depthBudget: depthBudget - 1)
-                commutative ^= element.finalize()
-            }
-            hasher.combine(commutative)
-        case .tagged(let tag, let value):
-            hasher.combine(6 as UInt8)
-            hasher.combine(tag)
-            guard depthBudget > 0 else { return }
-            value.hash(into: &hasher, depthBudget: depthBudget - 1)
+            hasher.combine(floatKey)
+        case .array, .map, .tagged:
+            break // handled by deepHash()
         }
     }
+
+    /// Finite values and infinities convert exactly to Double; NaNs must be
+    /// handled from their bits so conversion cannot quiet signaling NaNs.
+    private var floatKey: FloatKey {
+        switch self {
+        case .half(let bits):
+            if bits & 0x7c00 == 0x7c00, bits & 0x03ff != 0 {
+                return .nan(UInt64(bits & 0x03ff) << 54)
+            }
+            return .number(HalfPrecision.double(fromBits: bits))
+        case .float(let value):
+            let bits = value.bitPattern
+            if bits & 0x7f80_0000 == 0x7f80_0000, bits & 0x007f_ffff != 0 {
+                return .nan(UInt64(bits & 0x007f_ffff) << 41)
+            }
+            return .number(Double(value))
+        case .double(let value):
+            let bits = value.bitPattern
+            if bits & 0x7ff0_0000_0000_0000 == 0x7ff0_0000_0000_0000,
+               bits & 0x000f_ffff_ffff_ffff != 0 {
+                return .nan((bits & 0x000f_ffff_ffff_ffff) << 12)
+            }
+            return .number(value)
+        default:
+            preconditionFailure("floatKey requires a float")
+        }
+    }
+}
+
+private enum FloatKey: Hashable {
+    case number(Double)
+    case nan(UInt64)
+}
+
+/// The parent waiting for a child hash. Only one child of a container is
+/// pending at a time, so hashing a wide array or map uses O(depth) space.
+private enum HashFrame {
+    case array([CBOR], next: Int, Hasher)
+    case map([CBOR: CBOR], index: [CBOR: CBOR].Index, keyDigest: Int?, combined: Int)
+    case tag(Hasher)
+}
+
+private enum HashWork {
+    case value(CBOR)
+    case digest(Int)
 }
