@@ -38,7 +38,7 @@ Add the package to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/brokenhandsio/swift-cbor.git", from: "1.0.0-rc.1"),
+    .package(url: "https://github.com/brokenhandsio/swift-cbor.git", from: "1.0.0"),
 ],
 ```
 
@@ -218,7 +218,7 @@ dependency, disable default traits:
 ```swift
 .package(
     url: "https://github.com/brokenhandsio/swift-cbor.git",
-    from: "1.0.0-rc.1",
+    from: "1.0.0",
     traits: [] // enable no traits, omitting the default FoundationSupport
 ),
 ```
