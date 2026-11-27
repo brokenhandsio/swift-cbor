@@ -411,7 +411,7 @@ enum CBORParser {
     /// Build a `String` from `bytes`, or return `nil` if they are not well-formed
     /// UTF-8.
     @inline(__always)
-    private static func validatedString(_ bytes: [UInt8]) -> String? {
+    private static func validatedString(_ bytes: some Collection<UInt8>) -> String? {
         if #available(macOS 15.0, iOS 18.0, watchOS 11.0, tvOS 18.0, visionOS 2.0, *) {
             return String(validating: bytes, as: UTF8.self)
         }
@@ -428,7 +428,7 @@ enum CBORParser {
     ///
     /// Internal rather than private so tests can exercise it on OSes where the
     /// `#available` check above never reaches it.
-    static func validatedStringBackDeployed(_ bytes: [UInt8]) -> String? {
+    static func validatedStringBackDeployed(_ bytes: some Collection<UInt8>) -> String? {
         let string = String(decoding: bytes, as: UTF8.self)
         return string.utf8.elementsEqual(bytes) ? string : nil
     }
@@ -473,7 +473,14 @@ enum CBORParser {
                 throw CBORError.invalidIndefiniteLength(offset: chunk)
             }
             let length = try readArgument(initialByte & 0x1f, span, &offset, item: chunk)
+            let chunkStart = bytes.count
             try appendBytes(length, span, &offset, item: chunk, source: source, to: &bytes)
+            // Each definite text chunk must be valid UTF-8 on its own. A code
+            // point split across two chunks is invalid even if their concatenation
+            // is valid (RFC 8949 §3.2.3).
+            guard validatedString(bytes[chunkStart...]) != nil else {
+                throw CBORError.invalidUTF8(offset: chunk)
+            }
         }
         guard let string = validatedString(bytes) else {
             throw CBORError.invalidUTF8(offset: start)

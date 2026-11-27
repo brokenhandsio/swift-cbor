@@ -31,5 +31,8 @@ discoveries shared a directory.
 - `CBORDeepNesting/large-declared-{maps,arrays}` — 512 nested containers that
   each claim 1024 entries, then end abruptly. They exercise the shared
   reservation budget on a small input.
+- `{CBORDecode,CBORRoundTrip,CBORCodable}/split-utf8-*` and `valid-utf8-chunks`
+  — indefinite text strings whose chunk boundaries respectively split a UTF-8
+  code point or fall between complete code points.
 
 Adding more is just a matter of dropping files in.

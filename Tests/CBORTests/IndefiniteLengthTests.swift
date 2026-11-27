@@ -13,6 +13,11 @@ struct IndefiniteLengthTests {
     func textString() throws {
         let decoded = try CBOR.decode(bytes(fromHex: "7f657374726561646d696e67ff"))
         #expect(decoded == .textString("streaming"))
+        // A chunk boundary between complete UTF-8 code points is valid.
+        #expect(try CBOR.decode(bytes(fromHex: "7f62c3a96121ff")) == .textString("é!"))
+        // A combining mark may start a chunk: its UTF-8 sequence is complete.
+        #expect(try CBOR.decode(bytes(fromHex: "7f616562cc81ff")) == .textString("e\u{0301}"))
+        #expect(try CBOR.decode(bytes(fromHex: "7f6062c3a960ff")) == .textString("é"))
     }
 
     @Test("empty indefinite byte string")
