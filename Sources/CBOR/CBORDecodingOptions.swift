@@ -8,7 +8,9 @@ public struct CBORDecodingOptions: Sendable {
     ///
     /// A top-level primitive has depth 0; each nested array, map or tag increases
     /// the depth by one. Decoding throws ``CBORError/maxDepthExceeded(limit:offset:)`` when the
-    /// limit would be exceeded. This bounds stack usage on adversarial input.
+    /// limit would be exceeded. This bounds the depth of the parsed CBOR value.
+    /// ``CBORDecoder`` also bounds nested `Decodable` calls separately with
+    /// ``CBORDecoder/maximumCodableDepth``.
     /// Defaults to `512`.
     ///
     /// Values above ``maximumSupportedDepth`` have no additional effect: decoding
@@ -57,9 +59,10 @@ public struct CBORDecodingOptions: Sendable {
     /// concurrency's cooperative pool gives you. Since a library cannot know
     /// which it is on, it refuses to build values it may be unable to destroy.
     ///
-    /// 1024 leaves the default of 512 usable while staying inside the smaller
-    /// budget. Deeper input fails with ``CBORError/maxDepthExceeded(limit:offset:)``, which
-    /// is a normal error rather than a crash.
+    /// 1024 leaves the default of 512 usable for the CBOR value model while
+    /// staying inside the smaller budget. Deeper input fails with
+    /// ``CBORError/maxDepthExceeded(limit:offset:)``. `CBORDecoder` additionally
+    /// invokes application `Decodable` code and has its own recursion limit.
     public static let maximumSupportedDepth = 1024
 
     /// The default options.

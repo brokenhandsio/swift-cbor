@@ -178,6 +178,11 @@ Raising `maximumDepth` above it has no effect — decoding still stops at the ce
 bound is not a preference, it is the thing that keeps the guarantee in
 **[Limits](#limits)** true whatever a caller passes.
 
+`CBORDecoder` also limits active `Decodable.init(from:)` calls to 128 by default.
+This bounds recursion through the Codable bridge independently of CBOR nesting.
+Set `CBORDecoder(maximumCodableDepth: n)` if your model needs more levels;
+the safe value depends on your types, build configuration, and thread stack.
+
 ### Tags
 
 Tagged items use `CBORTag`, which comes with the common IANA tags:
@@ -251,10 +256,17 @@ high-water mark that moves with allocator behaviour and runner image.
 
 Like any Swift CBOR library built on a recursive value type, a decoded `CBOR` value is
 **deallocated recursively** — freeing a value nested many thousands of levels deep can
-exhaust the stack. Decoding and encoding themselves are fully iterative and never
+exhaust the stack. CBOR parsing and encoding are iterative and never
 recurse on input nesting, and `CBORDecodingOptions.maximumDepth` (default 512) bounds
 how deep a decoded value can be, so values decoded from untrusted input free safely on ordinary
 stacks. Lower `maximumDepth` if you decode on threads with unusually small stacks.
+
+`CBORDecoder` calls into Swift's `Decodable` implementations, which can recurse.
+Its separate `maximumCodableDepth` limit (default 128) rejects deep recursion
+through the Codable bridge before the tested recursive models exhaust ordinary
+worker-thread stacks. Custom `Decodable` implementations can still recurse
+inside their own code without calling the decoder; this limit cannot bound
+that application code.
 
 Raising it does not remove the bound: `maximumSupportedDepth` (1024) is a hard ceiling
 the decoder applies regardless. Without it, `maximumDepth` would be a guard a caller

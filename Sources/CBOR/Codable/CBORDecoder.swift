@@ -25,12 +25,22 @@ public struct CBORDecoder: Sendable {
     /// Options applied when reading the CBOR bytes.
     public var options: CBORDecodingOptions
 
+    /// Maximum number of nested `Decodable.init(from:)` calls. Defaults to `128`.
+    ///
+    /// This is separate from ``CBORDecodingOptions/maximumDepth``: a single
+    /// recursive Swift model can use several stack frames per CBOR container.
+    /// Exceeding this limit throws `DecodingError.dataCorrupted`. Raising it can
+    /// exhaust a small thread stack, depending on the decoded type and build.
+    public var maximumCodableDepth: Int
+
     /// Create a decoder.
     ///
-    /// - Parameter options: How to read the CBOR bytes: the depth limit and
-    ///   whether duplicate map keys are an error.
-    public init(options: CBORDecodingOptions = .default) {
+    /// - Parameters:
+    ///   - options: How to parse the CBOR bytes.
+    ///   - maximumCodableDepth: Maximum nested generic `Decodable` calls.
+    public init(options: CBORDecodingOptions = .default, maximumCodableDepth: Int = 128) {
         self.options = options
+        self.maximumCodableDepth = maximumCodableDepth
     }
 
     /// Decode a value of the given type from CBOR bytes.
@@ -46,7 +56,8 @@ public struct CBORDecoder: Sendable {
     }
 
     private func decode<T: Decodable>(_ type: T.Type, fromValue cbor: CBOR) throws -> T {
-        try _CBORDecoder(cbor: cbor, options: options).unbox(as: type)
+        try _CBORDecoder(cbor: cbor, options: options, maximumCodableDepth: maximumCodableDepth)
+            .unbox(as: type)
     }
 }
 
@@ -62,6 +73,8 @@ private enum PathComponent {
 private final class _CBORDecoder: Decoder {
     let cbor: CBOR
     let options: CBORDecodingOptions
+    let maximumCodableDepth: Int
+    private var activeCodableDepth: Int
     var userInfo: [CodingUserInfoKey: Any] { [:] }
 
     // The coding path is held as a link to the parent decoder plus this decoder's
@@ -72,9 +85,17 @@ private final class _CBORDecoder: Decoder {
     private let parent: _CBORDecoder?
     private let component: PathComponent
 
-    init(cbor: CBOR, options: CBORDecodingOptions, parent: _CBORDecoder? = nil, component: PathComponent = .root) {
+    init(
+        cbor: CBOR,
+        options: CBORDecodingOptions,
+        maximumCodableDepth: Int,
+        parent: _CBORDecoder? = nil,
+        component: PathComponent = .root
+    ) {
         self.cbor = cbor
         self.options = options
+        self.maximumCodableDepth = maximumCodableDepth
+        self.activeCodableDepth = parent?.activeCodableDepth ?? 0
         self.parent = parent
         self.component = component
     }
@@ -95,7 +116,10 @@ private final class _CBORDecoder: Decoder {
 
     /// A decoder for `value`, reached from this one by `component`.
     func child(_ value: CBOR, at component: PathComponent) -> _CBORDecoder {
-        _CBORDecoder(cbor: value, options: options, parent: self, component: component)
+        _CBORDecoder(
+            cbor: value, options: options,
+            maximumCodableDepth: maximumCodableDepth, parent: self, component: component
+        )
     }
 
     func container<Key: CodingKey>(keyedBy type: Key.Type) throws -> KeyedDecodingContainer<Key> {
@@ -133,6 +157,14 @@ private final class _CBORDecoder: Decoder {
             return Date(timeIntervalSince1970: seconds) as! T
         }
         #endif
+        guard activeCodableDepth < maximumCodableDepth else {
+            throw DecodingError.dataCorrupted(DecodingError.Context(
+                codingPath: codingPath,
+                debugDescription: "Decodable nesting exceeds the limit of \(maximumCodableDepth)."
+            ))
+        }
+        activeCodableDepth += 1
+        defer { activeCodableDepth -= 1 }
         return try T(from: self)
     }
 }

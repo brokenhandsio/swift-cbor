@@ -34,5 +34,7 @@ discoveries shared a directory.
 - `{CBORDecode,CBORRoundTrip,CBORCodable}/split-utf8-*` and `valid-utf8-chunks`
   — indefinite text strings whose chunk boundaries respectively split a UTF-8
   code point or fall between complete code points.
+- `CBORCodable/recursive-arrays-129` — 129 nested one-element arrays followed by
+  an empty array; the Codable recursion guard should reject it with an error.
 
 Adding more is just a matter of dropping files in.
