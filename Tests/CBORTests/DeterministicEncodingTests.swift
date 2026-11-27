@@ -1,7 +1,7 @@
 import Testing
 import CBOR
 
-@Suite("Deterministic encoding (RFC 8949 §4.2)")
+@Suite("Stable encoding")
 struct DeterministicEncodingTests {
     @Test("integers use the shortest form")
     func shortestInteger() {

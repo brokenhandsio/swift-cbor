@@ -13,14 +13,15 @@ Binary Object Representation, RFC 8949) library for Swift.
 - **Complete RFC 8949 support.** Every example in RFC 8949 Appendix A round-trips,
   including tags, indefinite-length items, half/single/double floats, and the full
   ±2⁶⁴ integer range.
-- **Deterministic encoding.** The same representation always encodes to the same bytes:
-  shortest-form integers, definite lengths and sorted map keys (RFC 8949 §4.2.1).
-  Floats keep the width they were given rather than being narrowed.
+- **Stable encoding.** The same representation always encodes to the same bytes:
+  shortest-form integers, definite lengths and sorted map keys. Floats keep the
+  width they were given, so this does not implement RFC 8949 core deterministic
+  encoding for floating-point values.
 - **Fast and lean.** Benchmarked against other Swift CBOR libraries, with fewer
   allocations and lower instruction counts across decode and encode.
 - **Two ways to use it.** Work with the `CBOR` value model directly, or bridge any
   `Codable` type through `CBOREncoder` / `CBORDecoder`.
-- **Optional Foundation.** Foundation is only used to bridge `Data`; it lives behind
+- **Optional Foundation.** Foundation is used to bridge `Data` and `Date`; it lives behind
   a package trait you can switch off to build with no Foundation dependency at all.
 - **`Sendable` throughout**, with a `@nonexhaustive` public API designed to evolve
   without source breaks. Codable `userInfo` values must also be `Sendable`.
@@ -141,7 +142,10 @@ let reading = try CBORDecoder().decode(Reading.self, from: bytes)
 ```
 
 Swift structs encode to CBOR maps keyed by their property names, with the keys
-sorted. With the `FoundationSupport` trait enabled (the default), two Foundation
+sorted. All keyed `Codable` containers write text keys: even `[Int: Value]` writes
+keys such as `"1"` as text. Use the `CBOR` value model to write integer-keyed maps.
+The decoder accepts integer keys as a fallback when the text key is absent.
+With the `FoundationSupport` trait enabled (the default), two Foundation
 types get a native CBOR form:
 
 - `Data` encodes as a byte string.
@@ -183,7 +187,8 @@ let value = try CBOR.decode(bytes, options: options)
 let reading = try CBORDecoder(options: options).decode(Reading.self, from: bytes)
 ```
 
-Encoding takes no options: its output is always deterministic.
+Encoding takes no options: it emits stable bytes for the same CBOR representation.
+Float cases retain their width rather than using the shortest width.
 
 `maximumDepth` is bounded by `CBORDecodingOptions.maximumSupportedDepth` (1024).
 Raising `maximumDepth` above it has no effect — decoding still stops at the ceiling. That
@@ -206,7 +211,7 @@ let custom: CBOR = .tagged(CBORTag(1668546817), .array([1, 2, 3]))
 
 ## Building without Foundation
 
-Foundation is only linked to bridge `Data` in the Codable layer, and it is gated
+Foundation is only linked to bridge `Data` and `Date` in the Codable layer, and it is gated
 behind the default-on `FoundationSupport` trait. To build with no Foundation
 dependency, disable default traits:
 
@@ -300,7 +305,7 @@ libFuzzer harnesses against the real API:
 | `CBORDeepMapKeys` | Maps with many keys sharing a deeply nested prefix |
 | `CBORDecodingOptions` | The options themselves: depth limit and duplicate-key rejection |
 | `CBORDecodeFirst` | That `decodeFirst` never reports consuming more bytes than it was given |
-| `CBORCodable` | The `Codable` bridge, asserting a deterministic encode fixed point |
+| `CBORCodable` | The `Codable` bridge, asserting a stable encode fixed point |
 
 Four bugs have been found this way and all four are fixed: float identity on map keys
 (`NaN != NaN` broke maps with NaN keys), recursive hashing overflowing the stack,

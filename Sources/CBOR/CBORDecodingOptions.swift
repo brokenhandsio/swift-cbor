@@ -1,7 +1,7 @@
 /// Options controlling how CBOR is decoded, by ``CBOR/decode(_:options:)-(Span<UInt8>,_)``,
 /// ``CBOR/decodeFirst(_:options:)-(Span<UInt8>,_)`` and ``CBORDecoder``.
 ///
-/// Encoding takes no options: its output is always deterministic. See
+/// Encoding takes no options: its output is stable for the same value. See
 /// ``CBOR/encode()``.
 public struct CBORDecodingOptions: Sendable {
     /// The maximum nesting depth to decode, inclusive.

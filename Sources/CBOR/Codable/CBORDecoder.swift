@@ -41,10 +41,17 @@ public struct CBORDecoder: Sendable {
 
     /// Create a decoder.
     ///
+    /// - Parameter options: How to parse the CBOR bytes.
+    public init(options: CBORDecodingOptions = .default) {
+        self.init(options: options, maximumCodableDepth: 128)
+    }
+
+    /// Create a decoder with a custom limit on nested `Decodable` calls.
+    ///
     /// - Parameters:
     ///   - options: How to parse the CBOR bytes.
     ///   - maximumCodableDepth: Maximum nested generic `Decodable` calls.
-    public init(options: CBORDecodingOptions = .default, maximumCodableDepth: Int = 128) {
+    public init(options: CBORDecodingOptions = .default, maximumCodableDepth: Int) {
         self.options = options
         self.maximumCodableDepth = maximumCodableDepth
         self.userInfo = [:]
@@ -350,13 +357,26 @@ private struct KeyedContainer<Key: CodingKey>: KeyedDecodingContainerProtocol {
     var codingPath: [any CodingKey] { decoder.codingPath }
 
     var allKeys: [Key] {
-        map.keys.compactMap { key in
+        var keys: [Key] = []
+        var seen: Set<String> = []
+        // Text keys take precedence over integer keys with the same CodingKey.
+        for key in map.keys {
+            guard case .textString(let string) = key,
+                  let codingKey = Key(stringValue: string),
+                  seen.insert(codingKey.stringValue).inserted else { continue }
+            keys.append(codingKey)
+        }
+        for key in map.keys {
             switch key {
-            case .textString(let string): return Key(stringValue: string)
-            case .unsignedInt, .negativeInt: return key.intValue.flatMap(Key.init(intValue:))
-            default: return nil
+            case .unsignedInt, .negativeInt:
+                guard let integer = key.intValue,
+                      let codingKey = Key(intValue: integer),
+                      seen.insert(codingKey.stringValue).inserted else { continue }
+                keys.append(codingKey)
+            default: break
             }
         }
+        return keys
     }
 
     /// The value stored under `key`: by its text form, which is what the encoder

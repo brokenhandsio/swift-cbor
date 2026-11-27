@@ -40,6 +40,68 @@ private struct PathRecorder: Decodable {
 }
 private struct RecorderHolder: Decodable { var list: [PathRecorder] }
 
+private struct EncodingPathRecorder: Encodable {
+    let expected: [String]
+
+    func encode(to encoder: any Encoder) throws {
+        #expect(encoder.codingPath.map(\.stringValue) == expected)
+        var container = encoder.singleValueContainer()
+        #expect(container.codingPath.map(\.stringValue) == expected)
+        try container.encode(1)
+    }
+}
+
+private struct ManualEncodingPaths: Encodable {
+    enum Keys: String, CodingKey { case list, parent }
+
+    func encode(to encoder: any Encoder) throws {
+        var keyed = encoder.container(keyedBy: Keys.self)
+        var list = keyed.nestedUnkeyedContainer(forKey: .list)
+        #expect(list.codingPath.map(\.stringValue) == ["list"])
+
+        let nestedKeyed = list.nestedContainer(keyedBy: Keys.self)
+        #expect(nestedKeyed.codingPath.map(\.stringValue) == ["list", "Index 0"])
+
+        let nestedUnkeyed = list.nestedUnkeyedContainer()
+        #expect(nestedUnkeyed.codingPath.map(\.stringValue) == ["list", "Index 1"])
+
+        let arraySuper = list.superEncoder()
+        #expect(arraySuper.codingPath.map(\.stringValue) == ["list", "Index 2"])
+
+        let keyedSuper = keyed.superEncoder()
+        #expect(keyedSuper.codingPath.map(\.stringValue) == ["super"])
+
+        let keyedSuperForKey = keyed.superEncoder(forKey: .parent)
+        #expect(keyedSuperForKey.codingPath.map(\.stringValue) == ["parent"])
+    }
+}
+
+private struct NumericCodingKey: CodingKey {
+    let stringValue: String
+    let intValue: Int?
+
+    init?(stringValue: String) {
+        self.stringValue = stringValue
+        self.intValue = Int(stringValue)
+    }
+
+    init?(intValue: Int) {
+        self.stringValue = String(intValue)
+        self.intValue = intValue
+    }
+}
+
+private struct NumericKeyProbe: Decodable {
+    let keys: [String]
+    let value: Int
+
+    init(from decoder: any Decoder) throws {
+        let container = try decoder.container(keyedBy: NumericCodingKey.self)
+        keys = container.allKeys.map(\.stringValue)
+        value = try container.decode(Int.self, forKey: NumericCodingKey(intValue: 1)!)
+    }
+}
+
 /// Reads one more element than the array holds.
 private struct ReadsPastEnd: Decodable {
     init(from decoder: any Decoder) throws {
@@ -139,6 +201,24 @@ struct CodableCorrectnessTests {
         #expect(holder.list.map(\.path) == [["list", "Index 0"], ["list", "Index 1"]])
     }
 
+    @Test("encoded array elements expose their index in codingPath")
+    func encodedArrayPaths() throws {
+        let values = [
+            EncodingPathRecorder(expected: ["Index 0"]),
+            EncodingPathRecorder(expected: ["Index 1"]),
+        ]
+        _ = try CBOREncoder().encode(values)
+        _ = try CBOREncoder().encode(["list": [
+            EncodingPathRecorder(expected: ["list", "Index 0"]),
+            EncodingPathRecorder(expected: ["list", "Index 1"]),
+        ]])
+    }
+
+    @Test("manual nested containers and super encoders expose the complete path")
+    func manualEncodingPaths() throws {
+        _ = try CBOREncoder().encode(ManualEncodingPaths())
+    }
+
     // MARK: Integer keys
 
     @Test("Int-valued coding keys decode an integer-keyed map")
@@ -163,6 +243,20 @@ struct CodableCorrectnessTests {
     func integerKeyedDictionary() throws {
         let bytes = ([1: "a", -2: "b"] as CBOR).encode()
         #expect(try CBORDecoder().decode([Int: String].self, from: bytes) == [1: "a", -2: "b"])
+    }
+
+    @Test("Codable writes integer dictionary keys as text")
+    func integerDictionaryEncoding() throws {
+        let bytes = try CBOREncoder().encode([1: "a"])
+        #expect(try CBOR.decode(bytes) == ["1": "a"])
+    }
+
+    @Test("allKeys deduplicates integer and text keys with text precedence")
+    func allKeysDeduplicatesNumericKeys() throws {
+        let bytes = (CBOR.map([.unsignedInt(1): 2, .textString("1"): 9])).encode()
+        let decoded = try CBORDecoder().decode(NumericKeyProbe.self, from: bytes)
+        #expect(decoded.keys == ["1"])
+        #expect(decoded.value == 9)
     }
 
     // MARK: Slices
